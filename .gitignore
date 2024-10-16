@@ -28,6 +28,7 @@
 !.github/ISSUE_TEMPLATE/*.yaml
 !.github/workflows
 !.github/workflows/*.yml
+!.github/pull.yml
 !uk_bin_collection
 !uk_bin_collection/**/*
 !uk_bin_collection_api_server
