@@ -1,3 +1,25 @@
+## 0.100.0 (2024-10-18)
+
+### Feat
+
+- Adding Dudley Council
+- Adding South Ribble Council
+- Plymouth Council
+- Adding Norwich City Council
+
+### Fix
+
+- #744
+- #671
+- #566
+- #749
+
+## 0.99.1 (2024-10-16)
+
+### Fix
+
+- #792 adding web_driver option to Wokingham Council
+
 ## 0.99.0 (2024-10-16)
 
 ### Feat
