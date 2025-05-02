@@ -1,3 +1,1323 @@
+=======
+## 0.152.0 (2025-05-02)
+
+### Feat
+
+- Added Fermanagh Omagh
+- Added Twekesbury
+- added Slough council
+- Added Argus Council
+- added Angus to input.json
+
+### Fix
+
+- Chichester now only requires postcode and house number
+- Broadland now only requires postcode and house number
+- Barking now only requires postcode and house number
+- Brighton now only requires postcode and house number
+- ensured all bins for this council
+- added skip_get_url to hyndburn
+
+## 0.151.0 (2025-04-27)
+
+### Feat
+
+- version bump
+
+### Fix
+
+- more robust brent date handling
+- input.json requires web_driver
+- Rugby fix
+- simplified blackburn
+
+## 0.150.0 (2025-04-27)
+
+### Feat
+
+- added melton
+
+### Fix
+
+- added melton
+- processed all bins for Moray
+
+## 0.149.0 (2025-04-27)
+
+### Feat
+
+- added pembrokeshire
+
+## 0.148.6 (2025-04-27)
+
+### Fix
+
+- updated input.json
+- cloudflare fix - switch to selenium method
+
+## 0.148.5 (2025-04-27)
+
+### Fix
+
+- output check
+- parsed bin info
+- selenium navigation
+- input.json changes
+
+## 0.148.4 (2025-04-27)
+
+### Fix
+
+- used canonical 'nice name'
+
+## 0.148.3 (2025-04-25)
+
+### Fix
+
+- working hyndburn
+- hyndburn input.json
+
+## 0.148.2 (2025-04-24)
+
+### Fix
+
+- Update docker-compose.yml
+
+## 0.148.1 (2025-04-22)
+
+### Fix
+
+- added bank holiday offsets.
+- added bank holiday offsets.
+
+## 0.148.0 (2025-04-19)
+
+### Feat
+
+- adding Wrexham and #1046 Horsham councils
+
+### Fix
+
+- Argyll and Bute council #1053
+
+## 0.147.2 (2025-04-18)
+
+### Fix
+
+- wait for element to be clickable
+
+## 0.147.1 (2025-04-18)
+
+### Fix
+
+- #1351 - moved geopandas to petry dev
+
+## 0.147.0 (2025-04-18)
+
+### Feat
+
+- add council tests results map
+
+## 0.146.2 (2025-04-18)
+
+### Fix
+
+- adding map checking and matching
+
+## 0.146.1 (2025-04-18)
+
+### Fix
+
+- more robust bank holiday handling
+
+## 0.146.0 (2025-04-18)
+
+### Feat
+
+- #1342 Adding Includes Trafford, Clackmannanshire, Havant, North Warwickshire, Newry Mourne and Down, East Dunbartonshire, Pendle, Torfaen, East Hampshire, Ribble Valley, Brentwood, Isle of Wight, Westmorland and Furness, Derry and Strabane, and Norwich. Google Cal support for PDF councils via ICS file
+
+### Fix
+
+- Black reformatting
+
+## 0.145.0 (2025-04-18)
+
+### Feat
+
+- Adding PDF councils
+
+## 0.144.4 (2025-04-18)
+
+### Fix
+
+- Bristol #1275
+
+## 0.144.3 (2025-04-17)
+
+### Fix
+
+- better address for input.json
+- bank holiday overrides
+- more robust address searching
+- simple parsing done
+- Selenium navigation
+
+## 0.144.2 (2025-04-17)
+
+### Fix
+
+- knowsley
+- knowsley
+- knowsley
+- knowsley
+- KnowsleyMBCouncil.py
+- #1220 adding Mid Ulster District Council
+
+## 0.144.1 (2025-04-17)
+
+### Fix
+
+- fix Sandwell garden waste collection date
+
+## 0.144.0 (2025-04-17)
+
+### Feat
+
+- added great yarmouth
+
+## 0.143.6 (2025-04-17)
+
+### Fix
+
+- Renfrewshire Council
+
+## 0.143.5 (2025-04-17)
+
+### Fix
+
+- Google Cal
+
+## 0.143.4 (2025-04-17)
+
+### Fix
+
+- Google Cal
+
+## 0.143.3 (2025-04-15)
+
+### Fix
+
+- #1301 Fix Leeds Council
+
+## 0.143.2 (2025-04-15)
+
+### Fix
+
+- #1301 Fix Leeds Council
+
+## 0.143.1 (2025-04-15)
+
+### Fix
+
+- Set the bin_type when different day
+
+## 0.143.0 (2025-04-13)
+
+### Fix
+
+- corrected url in input.json
+- fixed input.json
+- parsed Barking Dagenham collection information
+- selenium navigation Barking
+
+## 0.142.0 (2025-04-13)
+
+### Feat
+
+- Added Stirling Council
+
+### Fix
+
+- typo in input.json
+
+## 0.141.4 (2025-04-13)
+
+### Fix
+
+- #1304 - sesnors goes to unknown if the data is blank from councils who are less reliable
+
+## 0.141.3 (2025-04-13)
+
+### Fix
+
+- Newham council
+
+## 0.141.2 (2025-04-13)
+
+### Fix
+
+- Newham council
+- Newham council
+
+## 0.141.1 (2025-04-12)
+
+### Fix
+
+- missing finally block on selenium tests
+
+## 0.141.0 (2025-04-12)
+
+### Feat
+
+- #1185 Adding PeterboroughCity Council
+
+## 0.140.0 (2025-04-11)
+
+### Feat
+
+- Added Broadland District Council
+
+### Fix
+
+- cleanup of council file
+- added Broadland to input.json
+
+## 0.139.0 (2025-04-07)
+
+### Feat
+
+- adding #1037
+- adding #1032 North Devon Count Council
+
+### Fix
+
+- #1296 Forest of dean
+- 939 adding South Holland District Council - Lincolnshire UK
+
+## 0.138.1 (2025-04-05)
+
+### Fix
+
+- Walhtam forest council - revert previous changes
+
+## 0.138.0 (2025-04-05)
+
+### Feat
+
+- Adding Hastings Borough Council
+- Adding Fylde Council
+
+### Fix
+
+- #1249
+- #1039
+fix: #1181
+fix: #1266
+fix: #1274
+- Gloucester City Council
+- #1282
+- Mid Devon Council
+- #1277
+fix: #1287
+- West Oxfordshire Council
+- #1290
+
+## 0.137.0 (2025-04-05)
+
+### Feat
+
+- #816 adding trafford council
+
+## 0.136.0 (2025-03-24)
+
+### Feat
+
+- Adding Southampton City Council
+- Adding Cambridge City Council
+- Adding Spelthorne Borough Council
+
+### Fix
+
+- #1057
+- #1264
+- #1270
+- Bexley Council
+- #1256
+- HinckleyandBosworthBoroughCouncil
+- #1207
+- Hackney Council
+- #1230
+- Castlepoint District Council
+- #1252
+- Canterbury City Council
+- #1254
+
+## 0.135.4 (2025-03-24)
+
+### Fix
+
+- parse scheduleCodeWorkflowIDs instead of scheduleCodeWorkflowID for Hackney Council
+
+## 0.135.3 (2025-02-23)
+
+## 0.135.2 (2025-02-19)
+
+### Fix
+
+- North Yorkshire - multiple bins on a day
+
+## 0.135.1 (2025-02-18)
+
+### Fix
+
+- devcontainer
+
+## 0.135.0 (2025-02-17)
+
+### Feat
+
+- Adding Runnymede Borough Council
+- Adding Cherwell District Council
+- Adding Epsom and Ewell Borough Council
+- Adding Redcar and Cleveland Council
+- Adding Amber Valley Borough Council
+- Adding Bolsover Council
+
+### Fix
+
+- #833 adding Middlesbrough and check script for Selenium
+- Cotswold District Council
+- #1238
+- Leeds City Council
+- #1222
+- Derbyshire Dales District Council
+- Conwy County Borough
+- Sunderland City Council
+- #1219
+- Tendring District Council
+- #1221
+- #1214
+- #923
+- #895
+- #841
+- #903
+- #990
+- Torridge District Council
+- #1204
+- Neath Port Talbot
+- #1213
+
+## 0.134.3 (2025-02-15)
+
+### Fix
+
+- Update input.json
+- 1235 Councils missing Selenium in input.json
+
+## 0.134.2 (2025-02-15)
+
+### Fix
+
+- 1232 East herts missing Selenium url in input.json
+
+## 0.134.1 (2025-02-11)
+
+### Fix
+
+- Cheltenham Borough Council
+- #1061
+
+## 0.134.0 (2025-02-07)
+
+### Feat
+
+- Ipswich Borough Council - trying different address
+- Ipswich Borough Council - correcting param name in input.json
+- Ipswich Borough Council - added input.json values and refactored code
+- Ipswich Borough Council - initial implementation
+
+## 0.133.0 (2025-02-02)
+
+### Feat
+
+- adding manual refresh
+
+## 0.132.0 (2025-02-02)
+
+### Feat
+
+- adding manual refresh
+
+## 0.131.0 (2025-02-02)
+
+### Feat
+
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding manual refresh
+- adding unit tests for the new manual refresh
+- adding manual refresh control
+
+## 0.130.1 (2025-01-30)
+
+### Fix
+
+- slow councils
+
+## 0.130.0 (2025-01-29)
+
+### Feat
+
+- Add Herefordshire Council (closes: #1011)
+
+### Fix
+
+- Fix spacing in wiki name
+
+## 0.129.0 (2025-01-29)
+
+### Feat
+
+- Adding East Staffordshire Borough Council
+- Adding Boston Borough Council
+
+### Fix
+
+- input.json
+- input.json
+- Adding East Lothian Council
+- #1171
+- #1052
+fix: #1083
+- Leicester City Council
+- #1178
+- Cardiff Council
+- #1175
+- Newcastle City Council
+- #1179
+- #1180
+- Midlothian Council
+- #1192 - Adding Next Page support
+- Swale Borough Council
+- #1139
+
+## 0.128.6 (2025-01-29)
+
+### Fix
+
+- moving away from broken Allure reporting
+- moving away from broken Allure reporting
+- moving away from broken Allure reporting
+- moving away from broken Allure reporting
+- moving away from broken Allure reporting
+- moving away from broken Allure reporting
+- moving away from broken Allure reporting
+
+## 0.128.5 (2025-01-29)
+
+### Fix
+
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update CheshireEastCouncil.py
+
+## 0.128.4 (2025-01-28)
+
+### Fix
+
+- Update CheshireEastCouncil.py
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update CheshireEastCouncil.py
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+
+## 0.128.3 (2025-01-28)
+
+### Fix
+
+- Update CheshireEastCouncil.py
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+
+## 0.128.2 (2025-01-28)
+
+### Fix
+
+- Add communal recycling and communal rubbish
+- Add garden waste to Merton Council
+
+## 0.128.1 (2025-01-28)
+
+### Fix
+
+- Update AberdeenshireCouncil.py
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+
+## 0.128.0 (2025-01-28)
+
+### Feat
+
+- implement Medway Council (#1021)
+
+### Fix
+
+- Forgot to include skip_get_url
+
+## 0.127.4 (2025-01-25)
+
+### Fix
+
+- NewForestCouncil
+
+## 0.127.3 (2025-01-16)
+
+### Fix
+
+- Vale of White Horse
+- #1156
+- South Oxfordshire Council
+- #1158
+- Surrey Heath Borough Council
+- #1164
+- Carmarthenshire County Council
+- #1167
+- Glasgow City Council
+- #1166
+- Merton Council
+- NewarkAndSherwoodDC
+- Rushcliffe Borough Council
+- Powys Council
+- Staffordshire Moorlands District Council
+- Stroud District Council
+- Vale of Glamorgan Council
+- West Oxfordshire District Council
+
+## 0.127.2 (2025-01-13)
+
+### Fix
+
+- Update bin type to be the full string
+
+## 0.127.1 (2025-01-10)
+
+### Fix
+
+- Use visibility of list rather than existence
+- Update Rushcliffe Borough Council input elements and flow
+
+## 0.127.0 (2025-01-07)
+
+### Feat
+
+- Adding Oadby And Wigston Borough Council
+- Add Gwynedd Council
+- Adding Denbighshire Council
+- Adding Dundee City Council
+- Adding Brent Council
+- Adding West Dunbartonshire Council
+- Adding Cumberland Council
+
+### Fix
+
+- #929
+- Cornwall Council
+- #1137
+- #1125
+- #1106
+- #1108
+- #1109
+- #1134
+- Northumberland Council
+- #1082
+- #1110
+- Waltham Forest
+- #1126
+- London Borough Sutton
+- #1131
+- Kirklees Council
+- #1129 - Breaking Change. UPRN required
+
+## 0.126.2 (2025-01-07)
+
+### Fix
+
+- **tests**: updates test case url for coventry city council
+- **tests**: removes duplicate key for coventry city council
+- updates coventry city council button text
+
+## 0.126.1 (2025-01-06)
+
+### Fix
+
+- behave_testing
+- behave_testing
+
+## 0.126.0 (2025-01-04)
+
+### Feat
+
+- #1063 - rewrite Kirklees Council parser for new website
+- #1067 - Add garden bin collections where available for Norwich City Council
+- Adding Wandsworth Council
+
+### Fix
+
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update README.md to have links to Full and Partial Integration Test Reports
+- Swale Borough Council
+- #1080
+(cherry picked from commit 6f580b39fb68b8079990221e050ae8dd6d2b7285)
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update ArdsAndNorthDownCouncil.py
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update README.md to have links to Full and Partial Integration Test Reports
+- Update WestLindseyDistrictCouncil.py
+- #1101 - Fix table parsing for Walsall Council
+- Remove invalid escape sequence warnings from West Lindsey District Council
+- #1073 - change method of generating bin types to avoid manual mapping for Rugby Borough Council
+- add missing backticks to separate colour config and standard usage instructions
+- #1078
+(cherry picked from commit 89d93666bb659010d1c130b98c1d81c6ff80cf7c)
+- change date format to project default for Merton Council
+- correct date logic for Swale Borough Council
+- Merton Council
+- London Borough Sutton
+- #1076
+(cherry picked from commit 1eab20c9a57c9c4438ea343f374202bb2e9b98ca)
+- Swale Borough Council
+- #1080
+(cherry picked from commit 6f580b39fb68b8079990221e050ae8dd6d2b7285)
+- correct date/year logic for West Lindsey District Council
+- replace West Lindsey's input with working address
+- #1089 - Correct shifted dates in Bromley Borough Council
+- remove WDM import
+- #1087 - Food waste date incorrect for West Berkshire Council
+
+## 0.125.2 (2025-01-04)
+
+### Fix
+
+- Update ArdsAndNorthDownCouncil.py
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update README.md to have links to Full and Partial Integration Test Reports
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_schedule.yml
+- Update behave_pull_request.yml
+- Update behave_pull_request.yml
+- Update behave_schedule.yml
+- Update behave_schedule.yml
+
+## 0.125.1 (2025-01-04)
+
+### Fix
+
+- correctly handle year increment for January dates
+
+## 0.125.0 (2025-01-04)
+
+### Feat
+
+- Adding Redditch Borough Council
+- Adding Blaenau Gwent County Borough Council
+- Adding Wandsworth Council
+
+### Fix
+
+- #1068
+- #1098
+- Wiltshire Council
+- #1094
+- Salford City Council
+- #1097
+- #1078
+- Merton Council
+- Swale Borough Council
+- #1080
+- London Borough Sutton
+- #1076
+- Update behave_schedule.yml
+- Update bump.yml
+
+## 0.124.4 (2025-01-04)
+
+### Fix
+
+- Update behave_schedule.yml
+
+## 0.124.3 (2025-01-04)
+
+### Fix
+
+- allure reporting
+- allure reporting
+- allure reporting
+
+## 0.124.2 (2025-01-03)
+
+### Fix
+
+- Update behave.yml
+
+## 0.124.1 (2025-01-03)
+
+### Fix
+
+- avoid crashing on unexpected string value
+
+## 0.124.0 (2025-01-02)
+
+### Feat
+
+- Hart District Council
+
+## 0.123.2 (2024-12-19)
+
+### Fix
+
+- Update behave.yml
+
+## 0.123.1 (2024-12-18)
+
+### Fix
+
+- Update AberdeenCityCouncil.py
+- Update behave.yml
+
+## 0.123.0 (2024-12-17)
+
+## 0.122.0 (2024-12-04)
+
+### Feat
+
+- Adding Monmouthshire County Council
+- Adding Hinckley and Bosworth Borough Council
+
+### Fix
+
+- Glasgow City Council
+- Merton Council
+- Blaby District Council
+- Warwick District Council
+- Blackburn Council
+- Carmarthenshire County Council
+- High Peak Council
+- CarmarthenshireCountyCouncil
+
+## 0.121.1 (2024-12-03)
+
+### Fix
+
+- London Borough of Lewisham to have more reliable parsing of dates
+
+## 0.121.0 (2024-11-24)
+
+### Feat
+
+- Royal Borough of Greenwich
+- Adding London Borough of Lewisham
+- Adding Hackney Council
+- Adding Sandwell Borough Council
+- Adding Moray Council
+- Adding Kings Lynn and West Norfolk Borough Council
+- Adding Wyre Forest District Council
+- Adding Folkstone and Hythe District Council
+- Adding Cheltenham Borough Council
+- Adding Thurrock Council
+
+### Fix
+
+- West Northamptonshire Council
+- East Ayrshire Council
+- Cotswold District Council
+
+## 0.120.0 (2024-11-20)
+
+### Feat
+
+- Adding Hartlepool Borough Council
+- Adding Newcastle Under Lyme Council
+- Adding London Borough of Havering
+- Add Garden collection to EnvironmentFirst
+- Adding Cumberland Council (Allerdale District)
+- Adding North Hertfordshire District Council
+
+### Fix
+
+- #844
+- #778
+- #769
+- #1025
+- Mid Siffolk and Babergh Garden Collection Day
+- #1026
+This will require the use of a DAY to be added to the UPRN field
+- #1029
+- #1028
+
+## 0.119.0 (2024-11-20)
+
+### Feat
+
+- Adding Braintree District Council
+- Adding Burnley Borough Council
+- Adding Exeter City Council
+- Adding Edinburgh City Council
+- Adding Aberdeen City Council
+
+### Fix
+
+- #699
+- #1015
+- #1017
+- #894
+- #1019
+
+## 0.118.0 (2024-11-15)
+
+### Feat
+
+- Adding Wolverhampton City Council
+- Adding Stevenage Borough Council
+- Adding Thanet District Council
+- Adding Copeland Borough Council
+- Adding South Hams District Council
+- Adding Rother District Council
+
+### Fix
+
+- #966
+- #989
+- #1004
+- #1006
+- #1008
+- Rother District Council
+- #1009
+- CrawleyBoroughCouncil
+- #1005
+- Adding Garden collection to Babergh and MidSuffolk Council
+- #995
+
+## 0.117.0 (2024-11-13)
+
+### Feat
+
+- Adding South Staffordshire District Council fix: #885
+
+## 0.116.0 (2024-11-12)
+
+### Feat
+
+- Adding Ashfield District Council
+- Adding Gravesham Borough Council
+- Adding Argyll and Bute Council
+
+### Fix
+
+- #579
+- #991
+- #692
+- CheshireWestAndChesterCouncil
+- #993
+- Milton Keynes
+- #702
+- Adding Babergh and Mid Suffolk District Councils
+- #868
+fix: #919
+- Adding Derby City Council
+- #987
+
+## 0.115.0 (2024-11-11)
+
+### Feat
+
+- Adding Warrington Borough Council
+- Adding Antrim And Newtonabbey Council
+- Adding Hertsmere Borough Council
+- Adding West Lancashire Borough Council
+- Broxbourne Council
+
+### Fix
+
+- #695
+- #969
+- #776
+- #980
+- #982
+- Bradford MDC
+- #984
+
+## 0.114.6 (2024-11-09)
+
+### Fix
+
+- NBBC Date Fix
+
+## 0.114.5 (2024-11-08)
+
+### Fix
+
+- migration logging and debugging
+
+## 0.114.4 (2024-11-08)
+
+### Fix
+
+- migration not working
+- migration not working
+
+## 0.114.3 (2024-11-08)
+
+### Fix
+
+- fix manifest in custom component
+
+## 0.114.2 (2024-11-08)
+
+### Fix
+
+- #975 adding routine to handle migration error
+- #975 adding routine to handle migration error
+
+## 0.114.1 (2024-11-08)
+
+### Fix
+
+- Update manifest.json
+
+## 0.114.0 (2024-11-07)
+
+### Feat
+
+- Nuneaton and Bedworth Borough Council
+
+## 0.113.0 (2024-11-07)
+
+### Feat
+
+- adding calendar for Bins in Custom Component
+
+## 0.112.1 (2024-11-07)
+
+### Fix
+
+- #767 BREAKING CHANGE - READD your sensors / config
+
+## 0.112.0 (2024-11-06)
+
+### Feat
+
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- Adding Powys Council
+- Adding Worcester City Council
+- Adding Ards and North Down Council
+- Adding East Herts Council
+- Adding Ashford Borough Council
+- Adding Stockton On Tees Council
+- Adding Fife Council
+- Adding Flintshire County Council
+- Adding Teignbridge Council
+- Adding Harborough District Council
+- Adding Watford Borough Council
+- Adding Coventry City Council
+
+### Fix
+
+- CC testing and add Chesterfield
+- CC testing and add Chesterfield
+- CC testing and add Chesterfield
+- pytest-homeassistant-custom-component
+- Pydandic version
+- Pydandic version
+- WestOxfordshireDistrictCouncil
+- South Norfolk Council
+- ForestOfDeanDistrictCouncil
+- Croydon Council
+- South Kesteven District Council
+- #647
+- #630
+- #623
+- #586
+- #578
+- #389
+- #930
+- #933
+- #750
+- Refactor Midlothian Council scraper to use house number and postcode
+- West Berkshire Council
+- Southwark Council
+- #580
+- #888
+- #902
+- #607
+
+## 0.111.0 (2024-11-06)
+
+### Fix
+
+- Add London Borough of Sutton
+- #944
+- Add Mid Devon Council
+- #945
+- Adding Oxford City Council
+- #962
+- Tunbridge Wells / Lincoln
+- #963
+- Glasgow City Council
+
+## 0.110.0 (2024-11-04)
+
+### Fix
+
+- Adding Blaby District Council
+- #904
+- Adding Sefton Council
+- #770
+- Adding Bromsgrove District Council
+- #893
+- East Lindsey District Council
+- #957
+- Adding Carmarthenshire County Council
+- #892
+fix: #710
+- Adding East Ayrshire Council
+- #955
+
+## 0.109.2 (2024-11-03)
+
+### Fix
+
+- CC testing and add Chesterfield
+
+## 0.109.1 (2024-11-03)
+
+### Fix
+
+- CC testing and add Chesterfield
+- CC testing and add Chesterfield
+
+## 0.109.0 (2024-11-02)
+
+### Feat
+
+- Adding Cotswold District Council
+- Adding Breckland Council
+
+### Fix
+
+- St Helens Borough Council
+- #753
+- NewarkAndSherwoodDC
+- #941
+- #658
+- #656
+
+## 0.108.2 (2024-11-01)
+
+### Fix
+
+- pytest-homeassistant-custom-component
+
+## 0.108.1 (2024-11-01)
+
+### Fix
+
+- Pydandic version
+- Pydandic version
+
+## 0.108.0 (2024-11-01)
+
+### Feat
+
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- pytest fixes
+- Python 3.12 only and CustomComp. Unit testing
+
+## 0.107.0 (2024-10-31)
+
+### Feat
+
+- Adding Powys Council
+- Adding Worcester City Council
+- Adding Ards and North Down Council
+- Adding East Herts Council
+- Adding Ashford Borough Council
+
+### Fix
+
+- WestOxfordshireDistrictCouncil
+- South Norfolk Council
+- ForestOfDeanDistrictCouncil
+- Croydon Council
+- South Kesteven District Council
+- #647
+- #630
+- #623
+- #586
+- #578
+- #389
+
+## 0.106.0 (2024-10-28)
+
+### Feat
+
+- Adding Stockton On Tees Council
+- Adding Fife Council
+- Adding Flintshire County Council
+
+### Fix
+
+- #930
+- #933
+- #750
+- West Berkshire Council
+- Southwark Council
+
+## 0.105.1 (2024-10-24)
+
+### Fix
+
+- Refactor Midlothian Council scraper to use house number and postcode
+
+## 0.105.0 (2024-10-21)
+
+### Feat
+
+- Adding Teignbridge Council
+- Adding Harborough District Council
+- Adding Watford Borough Council
+- Adding Coventry City Council
+
+### Fix
+
+- #580
+- #888
+- #902
+- #607
+
+## 0.104.0 (2024-10-20)
+
+### Feat
+
+- Adding Luton Borough Council
+- Adding West Oxfordshire District Council
+- Adding Aberdeenshire Council
+- Adding Canterbury City Council
+- Adding Swindon Borough Council
+
+### Fix
+
+- #697
+- #694
+- #659
+- #590
+- #900
+
+## 0.103.0 (2024-10-20)
+
+### Feat
+
+- Adding RAW JSON Sensor
+
+### Fix
+
+- Black formatting
+- Black formatting
+
+## 0.102.0 (2024-10-20)
+
+### Feat
+
+- Moving from Attributes to Sensors
+- Moving from Attributes to Sensors
+
+## 0.101.0 (2024-10-20)
+
+### Feat
+
+- Add Midlothgian Council
+
+## 0.100.0 (2024-10-18)
+
+### Feat
+
+- Adding Dudley Council
+- Adding South Ribble Council
+- Plymouth Council
+- Adding Norwich City Council
+
+### Fix
+
+- #744
+- #671
+- #566
+- #749
+
+## 0.99.1 (2024-10-16)
+
+### Fix
+
+- #792 adding web_driver option to Wokingham Council
+
 ## 0.99.0 (2024-10-16)
 
 ### Feat

@@ -20,6 +20,7 @@
 !*.Dockerfile
 !docker-compose.yml
 !.vscode/launch.json
+!pytest.ini
 
 # Or these folders...
 !.github
@@ -36,6 +37,10 @@
 !wiki
 !wiki/**/*
 !custom_components
+!custom_components/**/*/
+!custom_components/uk_bin_collection/services.yaml
 __pycache__
 !TO_BE_CONVERTED
 !.devcontainer
+uk_bin_collection/.DS_Store
+uk_bin_collection/uk_bin_collection/.DS_Store

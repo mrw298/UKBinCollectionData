@@ -1,3 +1,5 @@
+import datetime
+
 from bs4 import BeautifulSoup
 
 from uk_bin_collection.uk_bin_collection.common import *
@@ -27,6 +29,32 @@ class CouncilClass(AbstractGetBinDataClass):
             "../Images/Bins/ashBin.gif": "Ash bin",
         }
 
+        fieldset = soup.find("fieldset")
+        ps = fieldset.find_all("p")
+        for p in ps:
+            collection = p.text.strip().replace("Your next ", "").split(".")[0]
+            bin_type = collection.split(" day is")[0]
+            collection_date = remove_ordinal_indicator_from_date_string(
+                collection
+            ).split("day is ")[1]
+            if collection_date == "Today":
+                collection_date = datetime.today().strftime(date_format)
+            elif collection_date == "Tomorrow":
+                collection_date = (datetime.today() + timedelta(days=1)).strftime(
+                    date_format
+                )
+                print(collection_date)
+            else:
+                collection_date = datetime.strptime(
+                    collection_date,
+                    "%A %d %B %Y",
+                ).strftime(date_format)
+            dict_data = {
+                "type": bin_type,
+                "collectionDate": collection_date,
+            }
+            data["bins"].append(dict_data)
+
         # Find the page body with all the calendars
         body = soup.find("div", {"id": "Application_ctl00"})
         calendars = body.find_all_next("table", {"title": "Calendar"})
@@ -38,7 +66,7 @@ class CouncilClass(AbstractGetBinDataClass):
             for icon in icons:
                 cal_item = icon.find_parent().find_parent()
                 bin_date = datetime.strptime(
-                    cal_item["title"],
+                    cal_item["title"].replace("today is ", ""),
                     "%A, %d %B %Y",
                 )
 

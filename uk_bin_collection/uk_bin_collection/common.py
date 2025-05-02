@@ -10,7 +10,6 @@ import pandas as pd
 import requests
 from dateutil.parser import parse
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.service import Service as ChromeService
 from urllib3.exceptions import MaxRetryError
 from webdriver_manager.chrome import ChromeDriverManager
@@ -106,6 +105,7 @@ def get_date_with_ordinal(date_number: int) -> str:
         else {1: "st", 2: "nd", 3: "rd"}.get(date_number % 10, "th")
     )
 
+
 def has_numbers(inputString: str) -> bool:
     """
 
@@ -159,6 +159,35 @@ def is_holiday(date_to_check: datetime, region: Region = Region.ENG) -> bool:
         return True
     else:
         return False
+
+
+def is_weekend(date_to_check: datetime) -> bool:
+    """
+    Checks if a given date is a weekend
+    :param date_to_check: Date to check if it falls on a weekend
+    :return: Bool - true if a weekend day, false if not
+    """
+    return True if date_to_check.date().weekday() >= 5 else False
+
+
+def is_working_day(date_to_check: datetime, region: Region = Region.ENG) -> bool:
+    """
+    Wraps is_holiday() and is_weekend() into one function
+    :param date_to_check: Date to check if holiday
+    :param region: The UK nation to check. Defaults to ENG.
+    :return: Bool - true if a working day (non-holiday, Mon-Fri).
+    """
+    return (
+        False
+        if is_holiday(date_to_check, region) or is_weekend(date_to_check)
+        else True
+    )
+
+
+def get_next_working_day(date: datetime, region: Region = Region.ENG) -> datetime:
+    while not is_working_day(date, region):
+        date += timedelta(days=1)
+    return date
 
 
 def get_weekday_dates_in_period(start: datetime, day_of_week: int, amount=8) -> list:
@@ -312,6 +341,7 @@ def create_webdriver(
     options.add_argument("--disable-gpu")
     options.add_argument("--start-maximized")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
     if user_agent:
         options.add_argument(f"--user-agent={user_agent}")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
