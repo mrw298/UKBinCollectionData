@@ -1,4 +1,64 @@
 =======
+## 0.152.5 (2025-06-07)
+
+### Fix
+
+- South Ribble and version pinning issues for input.json
+
+## 0.152.4 (2025-06-07)
+
+### Fix
+
+- **SouthRibble**: Corrected Date formatting issue
+- **SouthRibble**: Resolved South Ribble without selenium
+
+## 0.152.3 (2025-06-04)
+
+### Fix
+
+- NorthHertfordshire selenium script
+- Adur council
+- Eastleigh date fix
+- removed duplicates in BradfordMDC
+
+## 0.152.2 (2025-06-04)
+
+### Fix
+
+- Update Makefile
+- Update CheshireEastCouncil.py
+- Github action to handle branch name with parentheses
+
+## 0.152.1 (2025-05-15)
+
+### Fix
+
+- Update to fix North Somerset
+- Glasgow SSL bypass
+- more robust Northumberland
+- updated Eastleigh input.json
+- Eastleigh cloudflare fix
+- converted collection datetimes into dates for BH parsing.
+- Eastleigh cloudflare fix
+- Eastleigh cloudflare fix
+- added check_uprn to simplified councils
+- simplified Swindon
+- simplified East Devon
+- simplified Dover
+- Simplified Dartford
+- simplified Cheshire East
+- simplified Charnwood input.json
+- improved Charnwood
+- Adur Worthing fix
+- Chorley simplification
+- Bexley simplification
+- added URL to Torbay script
+- Guildford fixes
+- reworked Maidstone
+- maidstone input.json
+- Croydon selenium version
+- Stoke date-time fix
+
 ## 0.152.0 (2025-05-02)
 
 ### Feat
