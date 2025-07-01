@@ -1158,9 +1158,10 @@ Note: Pass the house number and postcode in their respective parameters.
 
 ### Cumberland Borough Council
 ```commandline
-python collect_data.py CumberlandCouncil https://waste.cumberland.gov.uk -u XXXXXXXX
+python collect_data.py CumberlandCouncil https://waste.cumberland.gov.uk -u XXXXXXXX -p "XXXX XXX"
 ```
 Additional parameters:
+- `-p` - postcode
 - `-u` - UPRN
 
 Note: Use [FindMyAddress](https://www.findmyaddress.co.uk/search) to find your UPRN.
@@ -2682,7 +2683,7 @@ Note: Replace UPRN in URL with your own UPRN.
 
 ### Oxford City Council
 ```commandline
-python collect_data.py OxfordCityCouncil https://www.oxford.gov.uk -u XXXXXXXX -p "XXXX XXX"
+python collect_data.py OxfordCityCouncil https://www.oxford.gov.uk/xfp/form/142 -u XXXXXXXX -p "XXXX XXX"
 ```
 Additional parameters:
 - `-u` - UPRN
@@ -3142,10 +3143,11 @@ Note: Provide your UPRN. Use [FindMyAddress](https://www.findmyaddress.co.uk/sea
 
 ### South Ribble Council
 ```commandline
-python collect_data.py SouthRibbleCouncil https://www.southribble.gov.uk -u XXXXXXXX
+python collect_data.py SouthRibbleCouncil https://forms.chorleysouthribble.gov.uk/xfp/form/70 -u XXXXXXXX -p "XXXX XXX"
 ```
 Additional parameters:
 - `-u` - UPRN
+- `-p` - postcode
 
 Note: You will need to use [FindMyAddress](https://www.findmyaddress.co.uk/search) to find your UPRN.
 

@@ -1,83 +1,130 @@
-import time
-
+from typing import Dict, List, Any, Optional
+from bs4 import BeautifulSoup
+from dateutil.relativedelta import relativedelta
 import requests
-
-from uk_bin_collection.uk_bin_collection.common import *
+import re
+from datetime import datetime
+from uk_bin_collection.uk_bin_collection.common import check_uprn, check_postcode, date_format
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
+from dateutil.parser import parse
 
 
-# import the wonderful Beautiful Soup and the URL grabber
 class CouncilClass(AbstractGetBinDataClass):
-    """
-    Concrete classes have to implement all abstract operations of the
-    base class. They can also override some operations with a default
-    implementation.
-    """
+    def get_data(self, url: str) -> str:
+        # This method is not used in the current implementation
+        return ""
 
-    def parse_data(self, page: str, **kwargs) -> dict:
+    def parse_data(self, page: str, **kwargs: Any) -> Dict[str, List[Dict[str, str]]]:
+        postcode: Optional[str] = kwargs.get("postcode")
+        uprn: Optional[str] = kwargs.get("uprn")
 
-        user_uprn = kwargs.get("uprn")
-        check_uprn(user_uprn)
-        bindata = {"bins": []}
+        if postcode is None or uprn is None:
+            raise ValueError("Both postcode and UPRN are required.")
 
-        SESSION_URL = "https://southribble-ss.achieveservice.com/authapi/isauthenticated?uri=https%253A%252F%252Fsouthribble-ss.achieveservice.com%252FAchieveForms%252F%253Fmode%253Dfill%2526form_uri%253Dsandbox-publish%25253A%252F%252FAF-Process-d3971054-2e93-4a74-8375-494347dd13fd%252FAF-Stage-2693df73-8a5f-4e24-86b8-456ef81dd4a1%252Fdefinition.json%2526process%253D1%2526process_uri%253Dsandbox-processes%25253A%252F%252FAF-Process-d3971054-2e93-4a74-8375-494347dd13fd%2526process_id%253DAF-Process-d3971054-2e93-4a74-8375-494347dd13fd%2526accept%253Dyes%2526consentMessageIds%25255B%25255D%253D3%2526accept%253Dyes%2526consentMessageIds%255B%255D%253D3&hostname=southribble-ss.achieveservice.com&withCredentials=true"
+        check_postcode(postcode)
+        check_uprn(uprn)
 
-        API_URL = "https://southribble-ss.achieveservice.com/apibroker/runLookup"
-
-        data = {
-            "formValues": {
-                "Your Collections": {
-                    "PickupDate": {"value": datetime.now().strftime("%Y-%m-%d")},
-                },
-                "Your details": {
-                    "LLPGUPRN": {"value": user_uprn},
-                },
-            },
-        }
-
+        session = requests.Session()
         headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": "https://southribble-ss.achieveservice.com/fillform/?iframe_id=fillform-frame-1&db_id=",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+            )
         }
-        s = requests.session()
-        r = s.get(SESSION_URL)
-        r.raise_for_status()
-        session_data = r.json()
-        sid = session_data["auth-session"]
-        params = {
-            "id": "58ab44ef078bd",
-            "repeat_against": "",
-            "noRetry": "false",
-            "getOnlyTokens": "undefined",
-            "log_id": "",
-            "app_name": "AF-Renderer::Self",
-            # unix_timestamp
-            "_": str(int(time.time() * 1000)),
-            "sid": sid,
-        }
-        r = s.post(API_URL, json=data, headers=headers, params=params)
-        r.raise_for_status()
-        data = r.json()
-        rows_data = data["integration"]["transformed"]["rows_data"]["0"]
-        if not isinstance(rows_data, dict):
-            raise ValueError("Invalid data returned from API")
-        BIN_TYPES = [
-            ("RCNextCollectionDate", "Household Waste (Non-Recyclable Waste)"),
-            ("RENextCollectionDate", "Blue/Green Recyclable Waste"),
-            ("GWNextCollectionDate", "Garden Waste Collection"),
-            ("FWNextCollectionDate", "Food Waste"),
-        ]
-        bin_type_dict = dict(BIN_TYPES)
+        session.headers.update(headers)
 
-        for row in rows_data.items():
-            if row[0].endswith("NextCollectionDate"):
-                if row[1]:
-                    bin_type = bin_type_dict.get(row[0], row[0])
-                    collection_date = row[1]
-                    dict_data = {"type": bin_type, "collectionDate": collection_date}
-                    bindata["bins"].append(dict_data)
+        # Step 1: Load form and get token + field names
+        initial_url = "https://forms.chorleysouthribble.gov.uk/xfp/form/70"
+        get_resp = session.get(initial_url)
+        soup = BeautifulSoup(get_resp.text, "html.parser")
 
-        return bindata
+        token = soup.find("input", {"name": "__token"})["value"]
+        page_id = soup.find("input", {"name": "page"})["value"]
+        postcode_field = soup.find("input", {"type": "text", "name": re.compile(".*_0_0")})["name"]
+
+        # Step 2: Submit postcode
+        post_resp = session.post(
+            initial_url,
+            data={
+                "__token": token,
+                "page": page_id,
+                "locale": "en_GB",
+                postcode_field: postcode,
+                "next": "Next",
+            },
+        )
+
+        soup = BeautifulSoup(post_resp.text, "html.parser")
+        token = soup.find("input", {"name": "__token"})["value"]
+        address_field_el = soup.find("select", {"name": re.compile(".*_1_0")})
+        if not address_field_el:
+            raise ValueError("Failed to find address dropdown after postcode submission.")
+
+        address_field = address_field_el["name"]
+
+        # Step 3: Submit UPRN and retrieve bin data
+        final_resp = session.post(
+            initial_url,
+            data={
+                "__token": token,
+                "page": page_id,
+                "locale": "en_GB",
+                postcode_field: postcode,
+                address_field: uprn,
+                "next": "Next",
+            },
+        )
+
+        soup = BeautifulSoup(final_resp.text, "html.parser")
+        table = soup.find("table", class_="data-table")
+        if not table:
+            raise ValueError("Could not find bin collection table.")
+
+        rows = table.find("tbody").find_all("tr")
+        data: Dict[str, List[Dict[str, str]]] = {"bins": []}
+
+        # Extract bin type mapping from JavaScript
+        bin_type_map = {}
+        scripts = soup.find_all("script", type="text/javascript")
+        for script in scripts:
+            if script.string and "const bintype = {" in script.string:
+                match = re.search(r'const bintype = \{([^}]+)\}', script.string, re.DOTALL)
+                if match:
+                    bintype_content = match.group(1)
+                    for line in bintype_content.split('\n'):
+                        line = line.strip()
+                        if '"' in line and ':' in line:
+                            parts = line.split(':', 1)
+                            if len(parts) == 2:
+                                key = parts[0].strip().strip('"').strip("'")
+                                value = parts[1].strip().rstrip(',').strip().strip('"').strip("'")
+                                bin_type_map[key] = value
+                    break
+
+        for row in rows:
+            cells = row.find_all("td")
+            if len(cells) >= 2:
+                bin_type_cell = cells[0]
+                bin_type = bin_type_cell.get_text(strip=True)
+                bin_type = bin_type_map.get(bin_type, bin_type)
+
+                date_text = cells[1].get_text(strip=True)
+                date_parts = date_text.split(", ")
+                date_str = date_parts[1] if len(date_parts) == 2 else date_text
+
+                try:
+                    day, month, year = date_str.split('/')
+                    year = int(year)
+                    if year < 100:
+                        year = 2000 + year
+
+                    date_obj = datetime(year, int(month), int(day)).date()
+
+                    data["bins"].append({
+                        "type": bin_type,
+                        "collectionDate": date_obj.strftime(date_format)
+                    })
+                except Exception:
+                    continue
+
+        return data
