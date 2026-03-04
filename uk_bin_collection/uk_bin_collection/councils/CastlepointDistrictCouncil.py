@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
@@ -25,7 +26,11 @@ class CouncilClass(AbstractGetBinDataClass):
         uprn = kwargs.get("uprn")
         check_uprn(uprn)
 
-        post_url = "https://apps.castlepoint.gov.uk/cpapps/index.cfm?fa=wastecalendar.displayDetails"
+        data = {"bins": []}
+
+        base_url = "https://apps.castlepoint.gov.uk/cpapps/"
+
+        post_url = f"{base_url}index.cfm?fa=myStreet.displayDetails"
         post_header_str = (
             "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,"
             "image/apng,"
@@ -50,47 +55,57 @@ class CouncilClass(AbstractGetBinDataClass):
         soup = BeautifulSoup(post_response.text, features="html.parser")
         soup.prettify()
 
-        data = {"bins": []}
-        collection_tuple = []
+        wasteCalendarContainer = soup.find("div", class_="contentContainer")
+        if not wasteCalendarContainer:
+            return data
+        year_txt = wasteCalendarContainer.find("h1").get_text(strip=True)
+        year = datetime.strptime(year_txt, "About my Street - %B %Y").strftime("%Y")
 
-        for i in range(1, 3):
-            calendar = soup.select(
-                f"#wasteCalendarContainer > div:nth-child(2) > div:nth-child({i}) > div"
-            )[0]
-            month = datetime.strptime(
-                calendar.find_next("h2").get_text(), "%B %Y"
-            ).strftime("%m")
-            year = datetime.strptime(
-                calendar.find_next("h2").get_text(), "%B %Y"
-            ).strftime("%Y")
+        calendarContainer = soup.find("div", class_="calendarContainer")
+        if not calendarContainer:
+            return data
+        calendarContainer2 = calendarContainer.find_all(
+            "div", class_="calendarContainer"
+        )
+
+        for container in calendarContainer2:
+            table = container.find("table", class_="calendar")
+            if not table:
+                continue
+            month_txt = container.find("tr", class_="calendar").get_text(strip=True)
+            month = datetime.strptime(month_txt, "%B").strftime("%m")
+            print(month_txt)
 
             pink_days = [
-                day.get_text().strip() for day in calendar.find_all("td", class_="pink")
+                td.get_text(strip=True)
+                for td in table.find_all("td", class_="pink")
+                if td.get_text(strip=True)
             ]
-            black_days = [
-                day.get_text().strip()
-                for day in calendar.find_all("td", class_="normal")
+            normal_days = [
+                td.get_text(strip=True)
+                for td in table.find_all("td", class_="normal")
+                if td.get_text(strip=True)
             ]
 
             for day in pink_days:
-                collection_date = datetime(
-                    year=int(year), month=int(month), day=int(day)
-                )
-                collection_tuple.append(("Pink collection", collection_date))
+                dict_data = {
+                    "type": "Pink collection",
+                    "collectionDate": datetime(
+                        year=int(year), month=int(month), day=int(day)
+                    ).strftime(date_format),
+                }
+                data["bins"].append(dict_data)
+            for day in normal_days:
+                dict_data = {
+                    "type": "Normal collection",
+                    "collectionDate": datetime(
+                        year=int(year), month=int(month), day=int(day)
+                    ).strftime(date_format),
+                }
+                data["bins"].append(dict_data)
 
-            for day in black_days:
-                collection_date = datetime(
-                    year=int(year), month=int(month), day=int(day)
-                )
-                collection_tuple.append(("Normal collection", collection_date))
-
-        ordered_data = sorted(collection_tuple, key=lambda x: x[1])
-
-        for item in ordered_data:
-            dict_data = {
-                "type": item[0],
-                "collectionDate": item[1].strftime(date_format),
-            }
-            data["bins"].append(dict_data)
+        data["bins"].sort(
+            key=lambda x: datetime.strptime(x.get("collectionDate"), "%d/%m/%Y")
+        )
 
         return data

@@ -1,127 +1,141 @@
-# This script pulls (in one hit) the data from Bromley Council Bins Data
-import datetime
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from bs4 import BeautifulSoup
+from icalevents.icalevents import events
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.wait import WebDriverWait
 
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
 
-# import the wonderful Beautiful Soup and the URL grabber
 class CouncilClass(AbstractGetBinDataClass):
-    """
-    Concrete classes have to implement all abstract operations of the
-    base class. They can also override some operations with a default
-    implementation.
-    """
-
     def parse_data(self, page: str, **kwargs) -> dict:
+        """
+        Locate the council collection round for the given address and return upcoming bin collection dates and types within the next 60 days.
+        
+        Parameters:
+            page (str): Unused parameter retained for API compatibility.
+            postcode (str, in kwargs): Postcode to search on the council site.
+            paon (str, in kwargs): Property/house name or number used to match the address row.
+        
+        Returns:
+            dict: A dictionary with a "bins" key containing a list of collection entries. Each entry is a dict with:
+                - "type": collection type string (e.g., "General waste")
+                - "collectionDate": collection date formatted according to the module's `date_format`
+        
+        Raises:
+            ValueError: If no collection round can be found for the provided `paon`, or if the calendar (.ics) link for the identified round cannot be located.
+        """
         driver = None
         try:
             data = {"bins": []}
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64)"}
+            user_agent = "Mozilla/5.0 (Windows NT 6.1; Win64; x64)"
 
-            uprn = kwargs.get("uprn")
             postcode = kwargs.get("postcode")
             user_paon = kwargs.get("paon")
             web_driver = kwargs.get("web_driver")
             headless = kwargs.get("headless")
-            driver = create_webdriver(web_driver, headless, None, __name__)
-            url = kwargs.get("url")
 
-            driver.execute_script(f"window.location.href='{url}'")
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
+            wait = WebDriverWait(driver, 30)
 
-            wait = WebDriverWait(driver, 120)
-            post_code_search = wait.until(
-                EC.presence_of_element_located((By.XPATH, '//input[@name="keyword"]'))
+            # Navigate to bin collection page
+            driver.get(
+                "https://www.chelmsford.gov.uk/bins-and-recycling/check-your-collection-day/"
             )
 
-            post_code_search.send_keys(postcode)
+            # Handle cookie overlay
+            try:
+                accept_btn = wait.until(
+                    EC.element_to_be_clickable(
+                        (By.XPATH, "//*[contains(text(), 'ACCEPT')]")
+                    )
+                )
+                accept_btn.click()
+                time.sleep(1)
+            except Exception as e:
+                # Cookie banner not present or already accepted
+                pass
 
-            submit_btn = wait.until(
-                EC.presence_of_element_located((By.CLASS_NAME, "__submitButton"))
-            )
-
-            submit_btn.send_keys(Keys.ENTER)
-
-            address_results = wait.until(
-                EC.presence_of_element_located((By.CLASS_NAME, "directories-table"))
-            )
-            address_link = wait.until(
+            # Find postcode input field (dynamic ID)
+            postcode_input = wait.until(
                 EC.presence_of_element_located(
-                    (By.XPATH, f"//a[contains(text(), '{user_paon}')]")
+                    (By.XPATH, "//input[contains(@id, '_keyword')]")
                 )
             )
+            postcode_input.clear()
+            postcode_input.send_keys(postcode)
 
-            address_link.send_keys(Keys.ENTER)
-            results = wait.until(
-                EC.presence_of_element_located((By.CLASS_NAME, "usercontent"))
+            # Click search button
+            submit_btn = wait.until(
+                EC.element_to_be_clickable((By.CLASS_NAME, "__submitButton"))
             )
+            submit_btn.click()
 
-            # Make a BS4 object
+            # Wait for results table
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+
+            # Get the collection round from the table row
             soup = BeautifulSoup(driver.page_source, features="html.parser")
-            soup.prettify()
 
-            # Get collection calendar
-            calendar_urls = soup.find_all(
-                "a", string=re.compile(r"view or download the collection calendar")
-            )
-            if len(calendar_urls) > 0:
-                requests.packages.urllib3.disable_warnings()
-                response = requests.get(calendar_urls[0].get("href"), headers=headers)
-
-                # Make a BS4 object
-                soup = BeautifulSoup(response.text, features="html.parser")
-                soup.prettify()
-
-                # Loop the months
-                for month in soup.find_all("div", {"class": "usercontent"}):
-                    year = ""
-                    if month.find("h2") and "calendar" not in month.find("h2").get_text(
-                        strip=True
-                    ):
-                        year = datetime.strptime(
-                            month.find("h2").get_text(strip=True), "%B %Y"
-                        ).strftime("%Y")
-                    elif month.find("h3"):
-                        year = datetime.strptime(
-                            month.find("h3").get_text(strip=True), "%B %Y"
-                        ).strftime("%Y")
-                    if year != "":
-                        for row in month.find_all("li"):
-                            results = re.search(
-                                "([A-Za-z]+ \\d\\d? [A-Za-z]+): (.+)",
-                                row.get_text(strip=True),
+            # Find the row containing the address
+            for row in soup.find_all("tr"):
+                if user_paon in row.get_text():
+                    # Extract collection round (e.g., "Tuesday B")
+                    row_text = row.get_text()
+                    round_match = re.search(
+                        r"(Monday|Tuesday|Wednesday|Thursday|Friday)\s+([AB])", row_text
+                    )
+                    if round_match:
+                        day = round_match.group(1).lower()
+                        letter = round_match.group(2).lower()
+                        calendar_url = f"https://www.chelmsford.gov.uk/bins-and-recycling/check-your-collection-day/{day}-{letter}-collection-calendar/"
+                        driver.get(calendar_url)
+                        soup = BeautifulSoup(driver.page_source, features="html.parser")
+                        a = soup.find(
+                            "a", href=lambda h: h and h.lower().endswith(".ics")
+                        )
+                        if a:
+                            ics_url = a["href"]
+                        else:
+                            raise ValueError(
+                                f"Could not find collection ICS file for address: {user_paon}"
                             )
-                            if results:
-                                dict_data = {
-                                    "type": results.groups()[1].capitalize(),
-                                    "collectionDate": datetime.strptime(
-                                        results.groups()[0] + " " + year, "%A %d %B %Y"
-                                    ).strftime(date_format),
-                                }
-                                data["bins"].append(dict_data)
-
-                # Sort collections
-                data["bins"].sort(
-                    key=lambda x: datetime.strptime(x.get("collectionDate"), "%d/%m/%Y")
+                        break
+            else:
+                raise ValueError(
+                    f"Could not find collection round for address: {user_paon}"
                 )
+
+            # Get events from ICS file within the next 60 days
+            now = datetime.now()
+            future = now + timedelta(days=60)
+
+            # Parse ICS calendar
+            upcoming_events = events(ics_url, start=now, end=future)
+
+            for event in sorted(upcoming_events, key=lambda e: e.start):
+                if event.summary and event.start:
+                    collections = event.summary.split(",")
+                    for collection in collections:
+                        data["bins"].append(
+                            {
+                                "type": collection.strip(),
+                                "collectionDate": event.start.date().strftime(
+                                    date_format
+                                ),
+                            }
+                        )
         except Exception as e:
-            # Here you can log the exception if needed
             print(f"An error occurred: {e}")
-            # Optionally, re-raise the exception if you want it to propagate
             raise
         finally:
-            # This block ensures that the driver is closed regardless of an exception
             if driver:
                 driver.quit()
+
         return data

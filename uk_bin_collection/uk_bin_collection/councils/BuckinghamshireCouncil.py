@@ -1,10 +1,25 @@
-from bs4 import BeautifulSoup
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
+import json
+from dataclasses import asdict, dataclass
+from typing import Literal
 
-from uk_bin_collection.uk_bin_collection.common import *
+import requests
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from uk_bin_collection.uk_bin_collection.common import check_uprn
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
+
+key_hex = "F57E76482EE3DC3336495DEDEEF3962671B054FE353E815145E29C5689F72FEC"
+iv_hex = "2CBF4FC35C69B82362D393A4F0B9971A"
+
+
+@dataclass
+class BucksInput:
+    P_CLIENT_ID: Literal[152]
+    P_COUNCIL_ID: Literal[34505]
+    P_LANG_CODE: Literal["EN"]
+    P_UPRN: str
 
 
 class CouncilClass(AbstractGetBinDataClass):
@@ -14,102 +29,89 @@ class CouncilClass(AbstractGetBinDataClass):
     implementation.
     """
 
-    def parse_data(self, page: str, **kwargs) -> dict:
-        driver = None
+    def encode_body(self, bucks_input: BucksInput):
+        key = bytes.fromhex(key_hex)
+        iv = bytes.fromhex(iv_hex)
+
+        json_data = json.dumps(asdict(bucks_input))
+        data_bytes = json_data.encode("utf-8")
+
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(data_bytes) + padder.finalize()
+
+        backend = default_backend()
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+
+        return ciphertext.hex()
+
+    def decode_response(self, hex_input: str):
+
+        key = bytes.fromhex(key_hex)
+        iv = bytes.fromhex(iv_hex)
+        ciphertext = bytes.fromhex(hex_input)
+
+        backend = default_backend()
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+        decryptor = cipher.decryptor()
+        decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
+
+        unpadder = padding.PKCS7(128).unpadder()
+        plaintext_bytes = unpadder.update(decrypted_padded) + unpadder.finalize()
+        plaintext = plaintext_bytes.decode("utf-8")
+
+        return json.loads(plaintext)
+
+    def parse_data(self, _: str, **kwargs) -> dict:
         try:
-            data = {"bins": []}
-            user_paon = kwargs.get("paon")
-            user_postcode = kwargs.get("postcode")
-            web_driver = kwargs.get("web_driver")
-            headless = kwargs.get("headless")
-            check_paon(user_paon)
-            check_postcode(user_postcode)
-
-            # Create Selenium webdriver
-            driver = create_webdriver(web_driver, headless, None, __name__)
-            driver.get(
-                "https://iapp.itouchvision.com/iappcollectionday/collection-day/?uuid=FA353FC74600CBE61BE409534D00A8EC09BDA3AC&lang=en"
+            user_uprn: str = kwargs.get("uprn") or ""
+            check_uprn(user_uprn)
+            bucks_input = BucksInput(
+                P_CLIENT_ID=152, P_COUNCIL_ID=34505, P_LANG_CODE="EN", P_UPRN=user_uprn
             )
 
-            # Wait for the postcode field to appear then populate it
-            inputElement_postcode = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "postcodeSearch"))
-            )
-            inputElement_postcode.send_keys(user_postcode)
+            encoded_input = self.encode_body(bucks_input)
 
-            # Click search button
-            findAddress = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, '//button[@class="govuk-button mt-4"]')
+            session = requests.Session()
+            headers = {
+                "P_PARAMETER": encoded_input,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            }
+            response = session.get(
+                "https://itouchvision.app/portal/itouchvision/kmbd/collectionDay",
+                headers=headers,
+            )
+
+            # Check if response is successful
+            if response.status_code != 200:
+                raise ValueError(
+                    f"API returned status code {response.status_code}: {response.text[:200]}"
+                )
+
+            output = response.text
+
+            # Check if output looks like hex (should only contain hex characters)
+            if not all(c in "0123456789ABCDEFabcdef" for c in output.strip()):
+                raise ValueError(
+                    f"API returned non-hex response (status {response.status_code}). Response starts with: {output[:200]}"
+                )
+
+            decoded_bins = self.decode_response(output)
+            data: dict[str, list[dict[str, str]]] = {}
+            data["bins"] = list(
+                map(
+                    lambda a: {
+                        "type": a["binType"],
+                        "collectionDate": a["collectionDay"].replace("-", "/"),
+                    },
+                    decoded_bins["collectionDay"],
                 )
             )
-            findAddress.click()
-
-            # Wait for the 'Select address' dropdown to appear and select option matching the house name/number
-            WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable(
-                    (
-                        By.XPATH,
-                        "//select[@id='addressSelect']//option[contains(., '"
-                        + user_paon
-                        + "')]",
-                    )
-                )
-            ).click()
-
-            # Wait for the collections table to appear
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (
-                        By.XPATH,
-                        '//div[@class="ant-row d-flex justify-content-between mb-4 mt-2 css-2rgkd4"]',
-                    )
-                )
-            )
-
-            soup = BeautifulSoup(driver.page_source, features="html.parser")
-
-            recyclingcalendar = soup.find(
-                "div",
-                {
-                    "class": "ant-row d-flex justify-content-between mb-4 mt-2 css-2rgkd4"
-                },
-            )
-
-            rows = recyclingcalendar.find_all(
-                "div",
-                {
-                    "class": "ant-col ant-col-xs-12 ant-col-sm-12 ant-col-md-12 ant-col-lg-12 ant-col-xl-12 css-2rgkd4"
-                },
-            )
-
-            current_year = datetime.now().year
-            current_month = datetime.now().month
-
-            for row in rows:
-                BinType = row.find("h3").text
-                collectiondate = datetime.strptime(
-                    row.find("div", {"class": "text-white fw-bold"}).text,
-                    "%A %d %B",
-                )
-                if (current_month > 10) and (collectiondate.month < 3):
-                    collectiondate = collectiondate.replace(year=(current_year + 1))
-                else:
-                    collectiondate = collectiondate.replace(year=current_year)
-
-                dict_data = {
-                    "type": BinType,
-                    "collectionDate": collectiondate.strftime("%d/%m/%Y"),
-                }
-                data["bins"].append(dict_data)
 
         except Exception as e:
             # Here you can log the exception if needed
             print(f"An error occurred: {e}")
             # Optionally, re-raise the exception if you want it to propagate
             raise
-        finally:
-            # This block ensures that the driver is closed regardless of an exception
-            if driver:
-                driver.quit()
         return data

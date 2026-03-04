@@ -15,12 +15,42 @@ class CouncilClass(AbstractGetBinDataClass):
 
     def parse_data(self, page: str, **kwargs) -> dict:
 
+        """
+        Fetches bin collection dates for a given UPRN from the Armagh Banbridge Craigavon council website and returns them as structured bin data.
+        
+        Parameters:
+            page (str): Ignored by this implementation.
+            kwargs:
+                uprn (str): Unique Property Reference Number used to look up the address schedule; required.
+        
+        Returns:
+            dict: Dictionary with a "bins" key mapping to a list of collections. Each collection is a dict with:
+                - "collectionDate" (str): Date in "DD/MM/YYYY" format.
+                - "type" (str): One of "Domestic", "Recycling", or "Garden".
+            The list is sorted in ascending order by the parsed collection date (format "%d/%m/%Y").
+        """
         user_uprn = kwargs.get("uprn")
         check_uprn(user_uprn)
         bindata = {"bins": []}
 
+        headers = {
+            "user-agent": "Mozilla/5.0",
+        }
+
         # Function to extract bin collection information
         def extract_bin_schedule(soup, heading_class):
+            """
+            Extracts bin collection date strings from the HTML section identified by the given heading class.
+            
+            Searches the parsed HTML for a div with the provided heading_class and returns the text content of all `h4` elements found in the associated content column.
+            
+            Parameters:
+                soup (bs4.BeautifulSoup): Parsed HTML document to search.
+                heading_class (str): CSS class of the section heading that identifies the bin schedule block.
+            
+            Returns:
+                list[str]: A list of collection date strings found in the section; empty if none are present.
+            """
             collections = []
 
             # Find the relevant section based on the heading class
@@ -40,7 +70,7 @@ class CouncilClass(AbstractGetBinDataClass):
         url = f"https://www.armaghbanbridgecraigavon.gov.uk/resident/binday-result/?address={user_uprn}"
 
         # Send a GET request to fetch the page content
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
 
         # Check if the request was successful
         if response.status_code == 200:

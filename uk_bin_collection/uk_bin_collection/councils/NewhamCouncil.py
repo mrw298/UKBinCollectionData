@@ -6,20 +6,22 @@ from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataC
 
 
 class CouncilClass(AbstractGetBinDataClass):
-    """
-    Concrete classes have to implement all abstract operations of the
-    base class. They can also override some operations with a default
-    implementation.
-    """
-
     def parse_data(self, page: str, **kwargs) -> dict:
-        # get the page data
-        request = urllib3.request(method="get", url=kwargs["url"])
-        page_data = request.data
+
+        try:
+            user_uprn = kwargs.get("uprn")
+            check_uprn(user_uprn)
+            url = f"https://bincollection.newham.gov.uk/Details/Index/{user_uprn}"
+            if not user_uprn:
+                # This is a fallback for if the user stored a URL in old system. Ensures backwards compatibility.
+                url = kwargs.get("url")
+        except Exception as e:
+            raise ValueError(f"Error getting identifier: {str(e)}")
 
         # Make a BS4 object
-        soup = BeautifulSoup(page_data, features="html.parser")
-        soup.prettify()
+        page = requests.get(url)
+        soup = BeautifulSoup(page.text, "html.parser")
+        soup.prettify
 
         # Form a JSON wrapper
         data = {"bins": []}

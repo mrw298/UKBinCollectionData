@@ -37,57 +37,76 @@ class CouncilClass(AbstractGetBinDataClass):
             # Populate postcode field
             inputElement_postcode = driver.find_element(
                 By.ID,
-                "ctl00_ContentPlaceHolder1_FF3518TB",
+                "FF3518-text",
             )
             inputElement_postcode.send_keys(user_postcode)
 
             # Click search button
             driver.find_element(
                 By.ID,
-                "ctl00_ContentPlaceHolder1_FF3518BTN",
+                "FF3518-find",
             ).click()
 
-            # Wait for the 'Select address' dropdown to appear and select option matching UPRN
+            # Wait for the 'Select address' dropdown to be visible and select option matching UPRN
             dropdown = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.ID, "ctl00_ContentPlaceHolder1_FF3518DDL")
-                )
+                EC.visibility_of_element_located((By.ID, "FF3518-list"))
             )
+
             # Create a 'Select' for it, then select the matching URPN option
             dropdownSelect = Select(dropdown)
-            dropdownSelect.select_by_value("U" + user_uprn)
+            found_uprn = False
+            for o in dropdownSelect.options:
+                ov = o.get_dom_attribute("value")
+                if "U" + user_uprn in ov:
+                    dropdownSelect.select_by_value(ov)
+                    found_uprn = True
+                    break
 
-            # Wait for the submit button to appear, then click it to get the collection dates
-            submit = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.ID, "ctl00_ContentPlaceHolder1_btnSubmit")
-                )
+            if not found_uprn:
+                raise Exception("could not find UPRN " + user_uprn + " in list")
+
+            # Click submit button
+            driver.find_element(
+                By.ID,
+                "submit-button",
+            ).click()
+
+            # Wait for the confirmation panel to appear
+            conf_div = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "ss_confPanel"))
             )
-            submit.click()
 
             soup = BeautifulSoup(driver.page_source, features="html.parser")
 
-            bins_text = soup.find("div", id="ctl00_ContentPlaceHolder1_pnlConfirmation")
+            bins_text = soup.find("div", id="body-content")
 
             if bins_text:
                 results = re.findall(
-                    "Your (.*?) bin will next be collected on (\d\d?\/\d\d?\/\d{4})",
-                    bins_text.find("div", {"class": "ss_confPanel"}).get_text(),
+                    r"Your next (.*?)(?:\s\(.*\))? bin collections will be (\d\d?\/\d\d?\/\d{4}) and (\d\d?\/\d\d?\/\d{4})",
+                    bins_text.get_text(),
                 )
                 if results:
                     for result in results:
-                        collection_date = datetime.strptime(result[1], "%d/%m/%Y")
-                        dict_data = {
-                            "type": result[0],
-                            "collectionDate": collection_date.strftime(date_format),
-                        }
-                        data["bins"].append(dict_data)
-
-                        data["bins"].sort(
-                            key=lambda x: datetime.strptime(
-                                x.get("collectionDate"), "%d/%m/%Y"
-                            )
+                        collection_one = datetime.strptime(result[1], "%d/%m/%Y")
+                        data["bins"].append(
+                            {
+                                "type": result[0],
+                                "collectionDate": collection_one.strftime(date_format),
+                            }
                         )
+                        collection_two = datetime.strptime(result[2], "%d/%m/%Y")
+                        data["bins"].append(
+                            {
+                                "type": result[0],
+                                "collectionDate": collection_two.strftime(date_format),
+                            }
+                        )
+
+                    data["bins"].sort(
+                        key=lambda x: datetime.strptime(
+                            x.get("collectionDate"), "%d/%m/%Y"
+                        )
+                    )
         except Exception as e:
             # Here you can log the exception if needed
             print(f"An error occurred: {e}")
