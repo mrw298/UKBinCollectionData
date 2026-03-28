@@ -6,20 +6,22 @@ from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataC
 
 
 class CouncilClass(AbstractGetBinDataClass):
-    """
-    Concrete classes have to implement all abstract operations of the
-    base class. They can also override some operations with a default
-    implementation.
-    """
-
     def parse_data(self, page: str, **kwargs) -> dict:
-        # get the page data
-        request = urllib3.request(method="get", url=kwargs["url"])
-        page_data = request.data
+
+        try:
+            user_uprn = kwargs.get("uprn")
+            check_uprn(user_uprn)
+            url = f"https://bincollection.newham.gov.uk/Details/Index/{user_uprn}"
+            if not user_uprn:
+                # This is a fallback for if the user stored a URL in old system. Ensures backwards compatibility.
+                url = kwargs.get("url")
+        except Exception as e:
+            raise ValueError(f"Error getting identifier: {str(e)}")
 
         # Make a BS4 object
-        soup = BeautifulSoup(page_data, features="html.parser")
-        soup.prettify()
+        page = requests.get(url, verify=False)
+        soup = BeautifulSoup(page.text, "html.parser")
+        soup.prettify
 
         # Form a JSON wrapper
         data = {"bins": []}
@@ -34,20 +36,27 @@ class CouncilClass(AbstractGetBinDataClass):
         if len(sections_recycling) > 0:
             sections.append(sections_recycling[0])
 
+        # as well as one for food waste
+        sections_food_waste = soup.find_all(
+            "div", {"class": "card h-100 card-food"}
+        )
+        if len(sections_food_waste) > 0:
+            sections.append(sections_food_waste[0])
+
         # For each bin section, get the text and the list elements
         for item in sections:
             header = item.find("div", {"class": "card-header"})
             bin_type_element = header.find_next("b")
             if bin_type_element is not None:
                 bin_type = bin_type_element.text
-                array_expected_types = ["Domestic", "Recycling"]
+                array_expected_types = ["Domestic", "Recycling", "Food Waste"]
                 if bin_type in array_expected_types:
                     date = (
                         item.find_next("p", {"class": "card-text"})
                         .find_next("mark")
                         .next_sibling.strip()
                     )
-                    next_collection = datetime.strptime(date, "%d/%m/%Y")
+                    next_collection = datetime.strptime(date, "%m/%d/%Y")
 
                     dict_data = {
                         "type": bin_type,

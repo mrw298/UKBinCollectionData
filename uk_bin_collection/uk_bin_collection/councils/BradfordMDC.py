@@ -1,3 +1,5 @@
+import re
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -33,7 +35,7 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-User": "?1",
             "Sec-GPC": "1",
             "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         params = {
             "ebp": "30",
@@ -89,15 +91,61 @@ class CouncilClass(AbstractGetBinDataClass):
                     )
                 ).strftime(date_format)
 
-        # Build data dict for each entry
-        dict_data = {
-            "type": bin_type,
-            "collectionDate": bin_date,
-        }
-        data["bins"].append(dict_data)
+            # Build data dict for each entry
+            dict_data = {
+                "type": bin_type,
+                "collectionDate": bin_date,
+            }
+            data["bins"].append(dict_data)
+
+        for bin in soup.find_all(attrs={"id": re.compile(r"CTID-D0TUYGxO-\d+-A")}):
+            dict_data = {
+                "type": "General Waste",
+                "collectionDate": datetime.strptime(
+                    bin.text.strip(),
+                    "%a %b %d %Y",
+                ).strftime(date_format),
+            }
+            data["bins"].append(dict_data)
+        for bin in soup.find_all(attrs={"id": re.compile(r"CTID-d3gapLk-\d+-A")}):
+            dict_data = {
+                "type": "Recycling Waste",
+                "collectionDate": datetime.strptime(
+                    bin.text.strip(),
+                    "%a %b %d %Y",
+                ).strftime(date_format),
+            }
+            data["bins"].append(dict_data)
+        for bin in soup.find_all(attrs={"id": re.compile(r"CTID-L8OidMPA-\d+-A")}):
+            dict_data = {
+                "type": "Garden Waste (Subscription Only)",
+                "collectionDate": datetime.strptime(
+                    bin.text.strip(),
+                    "%a %b %d %Y",
+                ).strftime(date_format),
+            }
+            data["bins"].append(dict_data)
 
         data["bins"].sort(
             key=lambda x: datetime.strptime(x.get("collectionDate"), date_format)
         )
+
+        data["bins"].sort(
+            key=lambda x: datetime.strptime(x.get("collectionDate"), date_format)
+        )
+
+        # Deduplicate the bins based on type and collection date
+        # Feels a bit hacky, but fixes
+        # https://github.com/robbrad/UKBinCollectionData/issues/1436
+        unique_bins = []
+        seen = set()
+        for bin_item in data["bins"]:
+            # Create a unique identifier for each bin entry
+            bin_key = (bin_item["type"], bin_item["collectionDate"])
+            if bin_key not in seen:
+                seen.add(bin_key)
+                unique_bins.append(bin_item)
+
+        data["bins"] = unique_bins
 
         return data

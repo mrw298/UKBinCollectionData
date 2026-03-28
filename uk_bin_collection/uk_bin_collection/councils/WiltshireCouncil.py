@@ -1,3 +1,5 @@
+import re
+
 from bs4 import BeautifulSoup
 
 from uk_bin_collection.uk_bin_collection.common import *
@@ -12,6 +14,24 @@ class CouncilClass(AbstractGetBinDataClass):
     """
 
     def parse_data(self, page: str, **kwargs) -> dict:
+        """
+        Extract upcoming bin collection dates and their types for the supplied postcode or UPRN.
+        
+        Queries the council waste collection calendar for the current month and the next two months, parses the HTML response, and returns a dictionary with a "bins" list containing collection entries.
+        
+        Parameters:
+            page (str): Unused parameter retained for interface compatibility.
+            postcode (str, optional): Provided via kwargs["postcode"]; the postcode to query.
+            uprn (str|int, optional): Provided via kwargs["uprn"]; will be converted to a 12-character zero-padded string.
+        
+        Returns:
+            dict: A dictionary with key "bins" mapping to a list of dictionaries. Each entry contains:
+                - "type": the collection type as a string.
+                - "collectionDate": the collection date as a string formatted according to the module's `date_format`.
+        
+        Raises:
+            SystemError: If an HTTP request to the council calendar endpoint does not return status code 200.
+        """
         requests.packages.urllib3.disable_warnings()
         # Define some months to get from the calendar
         this_month = datetime.now().month
@@ -25,6 +45,7 @@ class CouncilClass(AbstractGetBinDataClass):
         check_postcode(user_postcode)
         user_uprn = kwargs.get("uprn")
         check_uprn(user_uprn)
+        user_uprn = str(user_uprn).zfill(12)
 
         # Some data for the request
         cookies = {
@@ -44,14 +65,14 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 OPR/98.0.0.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 OPR/98.0.0.0",
             "X-Requested-With": "XMLHttpRequest",
             "sec-ch-ua": '"Chromium";v="112", "Not_A Brand";v="24", "Opera GX";v="98"',
             "sec-ch-ua-mobile": "?0",
             "sec-ch-ua-platform": '"Windows"',
         }
 
-        collections = []
+        data_bins = {"bins": []}
 
         # For each of the months we defined
         for cal_month in months:
@@ -76,7 +97,7 @@ class CouncilClass(AbstractGetBinDataClass):
 
             # Send it all as a POST
             response = requests.post(
-                "https://ilambassadorformsprod.azurewebsites.net/wastecollectiondays/collectionlist",
+                "https://ilambassadorformsprod.azurewebsites.net/wastecollectiondays/wastecollectioncalendar",
                 cookies=cookies,
                 headers=headers,
                 data=data,
@@ -90,46 +111,28 @@ class CouncilClass(AbstractGetBinDataClass):
 
             soup = BeautifulSoup(response.text, features="html.parser")
             soup.prettify()
-
             # Find all the bits of the current calendar that contain an event
-            events = soup.find_all("div", {"class": "rc-event-container"})
+            resultscontainer = soup.find_all("div", {"class": "cal-inner"})
 
-            for event in events:
-                # Get the date and type of each bin collection
-                bin_date = datetime.strptime(
-                    event.find_next("a").attrs.get("data-original-datetext"),
-                    "%A %d %B, %Y",
-                )
-                bin_type = event.find_next("a").attrs.get("data-original-title")
-                # Only process it if it's today or in the future
-                if bin_date.date() >= datetime.now().date():
-                    # Split the really long type up into two separate bins
-                    if (
-                        bin_type
-                        == "Mixed dry recycling (blue lidded bin) and glass (black box or basket)"
-                    ):
-                        collections.append(
-                            (
-                                "Mixed dry recycling (blue lidded bin)",
-                                datetime.strftime(bin_date, date_format),
-                            )
-                        )
-                        collections.append(
-                            (
-                                "Glass (black box or basket)",
-                                datetime.strftime(bin_date, date_format),
-                            )
-                        )
-                    else:
-                        collections.append(
-                            (bin_type, datetime.strftime(bin_date, date_format))
-                        )
+            for result in resultscontainer:
+                event = result.find("div", {"class": "events-list"})
+                if event:
+                    collectiondate = datetime.strptime(
+                        result.find("span", class_="day-no")["data-cal-date"],
+                        "%Y-%m-%dT%H:%M:%S",
+                    ).strftime(date_format)
+                    collection_type = result.select_one(
+                        ".rc-event-container span"
+                    ).text.strip()
 
-        data = {"bins": []}
+                    collection_types = collection_type.split(" and ")
 
-        # Now there's a list of collections, yeet them into the dictionary for nice JSON
-        for item in collections:
-            dict_data = {"type": item[0], "collectionDate": item[1]}
-            data["bins"].append(dict_data)
+                    for type in collection_types:
 
-        return data
+                        dict_data = {
+                            "type": type,
+                            "collectionDate": collectiondate,
+                        }
+                        data_bins["bins"].append(dict_data)
+
+        return data_bins

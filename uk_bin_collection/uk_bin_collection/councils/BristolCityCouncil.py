@@ -36,7 +36,7 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-GPC": "1",
             "Upgrade-Insecure-Requests": "1",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
-            "like Gecko) Chrome/105.0.0.0 Safari/537.36",
+            "like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         service_type_params = {
             "servicetypeid": "7dce896c-b3ba-ea11-a812-000d3a7f1cdc",
@@ -60,7 +60,7 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-Site": "cross-site",
             "Sec-GPC": "1",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
-            "like Gecko) Chrome/105.0.0.0 Safari/537.36",
+            "like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         llpg_uprn = "UPRN" + user_uprn
         llpg_json_data = {
@@ -86,7 +86,7 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "cross-site",
             "Sec-GPC": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         json_data = {
             "uprn": user_uprn,
@@ -126,11 +126,14 @@ class CouncilClass(AbstractGetBinDataClass):
 
         collections = []
         for bin in collection_data:
+            if not bin["collection"]:
+                continue  # Skip if there are no collection dates
+
             bin_type = bin["containerName"]
             next_collection = datetime.strptime(
                 bin["collection"][0]["nextCollectionDate"], "%Y-%m-%dT%H:%M:%S"
             ).strftime(date_format)
-            # Could work out next date using the roundDescription and the is_holiday function in common.py
+
             collections.append((bin_type, next_collection))
 
         ordered_data = sorted(collections, key=lambda x: x[1])
