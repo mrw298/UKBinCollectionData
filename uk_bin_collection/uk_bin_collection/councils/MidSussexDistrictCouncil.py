@@ -1,17 +1,10 @@
 import logging
-import time
 
 from bs4 import BeautifulSoup
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.common.keys import Keys
 
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
-# Set up logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -23,146 +16,103 @@ class CouncilClass(AbstractGetBinDataClass):
     """
 
     def parse_data(self, page: str, **kwargs) -> dict:
-        driver = None
         try:
             data = {"bins": []}
-            collections = []
+            bindata = {"bins": []}
             user_paon = kwargs.get("paon")
             user_postcode = kwargs.get("postcode")
-            web_driver = kwargs.get("web_driver")
-            headless = kwargs.get("headless")
             check_postcode(user_postcode)
 
-            # Create Selenium webdriver
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            # The council previously used the shared Whitespace portal at
+            # sms-wrp.whitespacews.com. That subdomain now returns
+            # "Access denied!" — the council moved to a self-branded
+            # Whitespace deployment at waste.services.midsussex.gov.uk
+            # but the underlying flow (seq=1 -> seq=2 with paon/postcode)
+            # is identical.
+            URI = "https://waste.services.midsussex.gov.uk/"
 
-            driver.get("https://www.midsussex.gov.uk/waste-recycling/bin-collection/")
-            wait = WebDriverWait(driver, 60)
-
-            try:
-                logging.info("Cookies")
-                cookie_window = wait.until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, '//div[@id="ccc-content"]')
+            session = requests.Session()
+            session.headers.update(
+                {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/132.0.0.0 Safari/537.36"
                     )
-                )
-                time.sleep(2)
-                accept_cookies = WebDriverWait(driver, timeout=10).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, '//button[@id="ccc-recommended-settings"]')
-                    )
-                )
-                accept_cookies.send_keys(Keys.ENTER)
-                accept_cookies.click()
-                accept_cookies_close = WebDriverWait(driver, timeout=10).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, '//button[@id="ccc-close"]')
-                    )
-                )
-                accept_cookies_close.send_keys(Keys.ENTER)
-                accept_cookies_close.click()
-            except:
-                print(
-                    "Accept cookies banner not found or clickable within the specified time."
-                )
-                pass
-
-            def click_element(by, value):
-                element = wait.until(EC.element_to_be_clickable((by, value)))
-                driver.execute_script("arguments[0].scrollIntoView();", element)
-                element.click()
-
-            logging.info("Entering postcode")
-            input_element_postcode = wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, '//input[@id="PostCodeStep_strAddressSearch"]')
-                )
+                }
             )
 
-            input_element_postcode.send_keys(user_postcode)
+            # get link from first page as has some kind of unique hash
+            r = session.get(URI, timeout=30)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, features="html.parser")
 
-            logging.info("Entering postcode")
-
-            click_element(By.XPATH, "//button[contains(text(), 'Search')]")
-
-            logging.info("Selecting address")
-            dropdown = wait.until(
-                EC.element_to_be_clickable((By.ID, "StrAddressSelect"))
+            alink = soup.find(
+                "a",
+                string=lambda s: s
+                and "View my collections" in s,
             )
 
-            dropdown_options = wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//select[@id='StrAddressSelect']/option")
-                )
-            )
-            dropdownSelect = Select(dropdown)
-            dropdownSelect.select_by_visible_text(str(user_paon))
+            if alink is None:
+                raise Exception("Initial page did not load correctly")
 
-            click_element(By.XPATH, "//button[contains(text(), 'Select')]")
+            # replace 'seq' query string to skip next step
+            nextpageurl = alink["href"].replace("seq=1", "seq=2")
 
-            logging.info("Waiting for bin schedule")
-            bin_results = wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, f"//strong[contains(text(), '{user_paon}')]")
-                )
-            )
+            data = {
+                "address_name_number": user_paon,
+                "address_postcode": user_postcode,
+            }
 
-            # Make a BS4 object
-            soup = BeautifulSoup(driver.page_source, features="html.parser")
+            r = session.post(nextpageurl, data=data, timeout=30)
+            r.raise_for_status()
 
-            # Find the table with bin collection data
-            table = soup.find("table", class_="collDates")
-            if table:
-                rows = table.find_all("tr")[1:]  # Skip the header row
+            soup = BeautifulSoup(r.text, features="html.parser")
+
+            alink = soup.find("div", id="property_list").find("a")
+
+            if alink is None:
+                raise Exception("Address not found")
+
+            # property_list href may already be absolute on the rebranded portal
+            href = alink["href"]
+            if href.startswith("http"):
+                nextpageurl = href
             else:
-                rows = []
+                nextpageurl = URI + href.lstrip("/")
 
-            # Extract the data from the table and format it according to the JSON schema
-            bins = []
-            date_pattern = re.compile(r"(\d{2}) (\w+) (\d{4})")
+            r = session.get(nextpageurl, timeout=30)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, features="html.parser")
 
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) < 3:
-                    print("Skipping row, not enough columns:", row)
-                    continue  # Skip rows that do not have enough columns
+            if soup.find("span", id="waste-hint"):
+                raise Exception("No scheduled services at this address")
 
-                collection_type = cols[1].text.strip()
-                collection_date = cols[2].text.strip()
+            u1s = soup.find("section", id="scheduled-collections").find_all(
+                "ul", class_="displayinlineblock"
+            )
 
-                # Convert the collection date to the required format
-                date_match = date_pattern.search(collection_date)
-                if date_match:
-                    day, month, year = date_match.groups()
-                    month_number = {
-                        "January": "01",
-                        "February": "02",
-                        "March": "03",
-                        "April": "04",
-                        "May": "05",
-                        "June": "06",
-                        "July": "07",
-                        "August": "08",
-                        "September": "09",
-                        "October": "10",
-                        "November": "11",
-                        "December": "12",
-                    }.get(month, "00")
+            for u1 in u1s:
+                lis = u1.find_all("li", recursive=False)
 
-                    formatted_date = f"{day}/{month_number}/{year}"
-                    bins.append(
-                        {"type": collection_type, "collectionDate": formatted_date}
-                    )
-                else:
-                    print("Date pattern not found in:", collection_date)
+                date = lis[1].text.replace("\n", "")
+                bin_type = lis[2].text.replace("\n", "")
 
-            # Create the final JSON structure
-            bin_data = {"bins": bins}
-            return bin_data
+                dict_data = {
+                    "type": bin_type,
+                    "collectionDate": datetime.strptime(
+                        date,
+                        "%d/%m/%Y",
+                    ).strftime(date_format),
+                }
+                bindata["bins"].append(dict_data)
+
+            bindata["bins"].sort(
+                key=lambda x: datetime.strptime(x.get("collectionDate"), date_format)
+            )
+
+            return bindata
+
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             raise
-
-        finally:
-            if driver:
-                driver.quit()

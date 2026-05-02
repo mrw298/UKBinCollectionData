@@ -1,68 +1,63 @@
-import json
-
 import requests
+from bs4 import BeautifulSoup
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
 
+BIN_TYPES = {"refuse": "Refuse", "recycle": "Recycling", "garden": "Garden Waste"}
+
+
 class CouncilClass(AbstractGetBinDataClass):
-    """
-    Concrete classes have to implement all abstract operations of the
-    base class. They can also override some operations with a default
-    implementation.
-    """
-
     def parse_data(self, page: str, **kwargs) -> dict:
-        user_postcode = kwargs.get("postcode")
-        check_postcode(user_postcode)
+        uprn = kwargs.get("uprn")
+        check_uprn(uprn)
 
+        url = f"https://www.fareham.gov.uk/bincalendar/intro.aspx?ref={uprn}"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
         }
-        params = {
-            "type": "JSON",
-            "list": "DomesticBinCollections",
-            "Road": "",
-            "Postcode": user_postcode,
-        }
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
 
-        response = requests.get(
-            "https://www.fareham.gov.uk/internetlookups/search_data.aspx",
-            params=params,
-            headers=headers,
-        )
-
-        bin_data = response.json()["data"]
+        soup = BeautifulSoup(response.text, features="html.parser")
+        today = datetime.now()
         data = {"bins": []}
 
-        if "rows" in bin_data:
-            collection_str = bin_data["rows"][0]["DomesticBinDay"]
+        for table in soup.find_all("table"):
+            caption = table.find("caption")
+            if not caption:
+                continue
+            month_str = caption.get_text(strip=True)
+            try:
+                month_date = datetime.strptime(month_str, "%B %Y")
+            except ValueError:
+                continue
 
-            results = re.findall(r"(\d\d?\/\d\d?\/\d{4}) \((\w*)\)", collection_str)
-
-            if results:
-                for result in results:
-                    collection_date = datetime.strptime(result[0], "%d/%m/%Y")
-                    dict_data = {
-                        "type": result[1],
-                        "collectionDate": collection_date.strftime(date_format),
-                    }
-                    data["bins"].append(dict_data)
-
-                    # Garden waste is also collected on recycling day
-                    if dict_data["type"] == "Recycling":
-                        garden_data = {
-                            "type": "Garden",
-                            "collectionDate": dict_data["collectionDate"],
-                        }
-                        data["bins"].append(garden_data)
-            else:
-                raise RuntimeError("Dates not parsed correctly.")
-        else:
-            raise ValueError("Postcode not found on website.")
+            for td in table.find_all("td"):
+                classes = td.get("class", [])
+                day_text = td.get_text(strip=True)
+                if not day_text or not day_text.isdigit():
+                    continue
+                day = int(day_text)
+                try:
+                    collection_date = month_date.replace(day=day)
+                except ValueError:
+                    continue
+                if collection_date.date() < today.date():
+                    continue
+                for css_class in classes:
+                    if css_class in BIN_TYPES:
+                        data["bins"].append(
+                            {
+                                "type": BIN_TYPES[css_class],
+                                "collectionDate": collection_date.strftime(
+                                    date_format
+                                ),
+                            }
+                        )
 
         data["bins"].sort(
-            key=lambda x: datetime.strptime(x.get("collectionDate"), "%d/%m/%Y")
+            key=lambda x: datetime.strptime(x.get("collectionDate"), date_format)
         )
 
         return data

@@ -2,6 +2,7 @@ import time
 from datetime import timedelta
 
 from bs4 import BeautifulSoup
+
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
@@ -15,6 +16,17 @@ class CouncilClass(AbstractGetBinDataClass):
     """
 
     def parse_data(self, page: str, **kwargs) -> dict:
+        """
+        Parse an HTML page to extract scheduled bin collection types and their collection dates.
+
+        Parameters:
+            page: An object with a `text` attribute containing the HTML of the council's bin collection page (e.g., an HTTP response).
+
+        Returns:
+            dict: A dictionary with a "bins" key mapping to a list of collections, where each collection is a dict with:
+                - "type": the collection description string (e.g., "Garden waste")
+                - "collectionDate": the collection date formatted according to the module's `date_format`
+        """
         data = {"bins": []}
         collection_types = [
             "non recyclable waste",
@@ -56,23 +68,42 @@ class CouncilClass(AbstractGetBinDataClass):
                 .find("table")
                 .find_all_next("tr")
             )
-
             for day in week_days:
                 for row in collection_schedule:
                     schedule_type = row.find("th").get_text().strip()
+
+                    # collection schedule contains area name -> filter out
+                    if schedule_type == "Area":
+                        continue
+
                     results2 = re.search("([^(]+)", row.find("td").get_text().strip())
+                    schedule_cadence = row.find("td").get_text().strip().split(" ")[1]
                     if results2:
                         schedule_day = results2[1].strip()
                         for collection_type in week_collection_types:
+                            collectionDate = None
                             if collection_type in schedule_type.lower():
                                 if (
                                     day.weekday()
                                     == time.strptime(schedule_day, "%A").tm_wday
                                 ):
-                                    dict_data = {
-                                        "type": schedule_type,
-                                        "collectionDate": day.strftime(date_format),
-                                    }
-                                    data["bins"].append(dict_data)
+                                    collectionDate = day.strftime(date_format)
+                            else:
+                                if "Fortnightly" in schedule_cadence:
+                                    if (
+                                        day.weekday()
+                                        == time.strptime(schedule_day, "%A").tm_wday
+                                    ):
+                                        adjusted_day = day + timedelta(days=7)
+                                        collectionDate = adjusted_day.strftime(
+                                            date_format
+                                        )
+
+                            if schedule_type and collectionDate:
+                                dict_data = {
+                                    "type": schedule_type,
+                                    "collectionDate": collectionDate,
+                                }
+                                data["bins"].append(dict_data)
 
         return data

@@ -1,6 +1,7 @@
 from xml.etree import ElementTree
 
 from bs4 import BeautifulSoup
+
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
@@ -33,7 +34,7 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         requests.packages.urllib3.disable_warnings()
         post_data = (
@@ -68,18 +69,30 @@ class CouncilClass(AbstractGetBinDataClass):
                 collection_date = ""
                 results = re.search("([A-Za-z]+ \\d\\d? [A-Za-z]+) then", bin_info)
                 if results:
-                    date = get_next_occurrence_from_day_month(
-                        datetime.strptime(
-                            results[1] + " " + datetime.now().strftime("%Y"),
-                            "%a %d %b %Y",
+                    if results[1] == "Today":
+                        date = datetime.now()
+                    elif results[1] == "Tomorrow":
+                        date = datetime.now() + timedelta(days=1)
+                    else:
+                        date = get_next_occurrence_from_day_month(
+                            datetime.strptime(
+                                results[1] + " " + datetime.now().strftime("%Y"),
+                                "%a %d %b %Y",
+                            )
                         )
-                    )
                     if date:
                         collection_date = date.strftime(date_format)
                 else:
                     results2 = re.search("([A-Za-z]+) then", bin_info)
                     if results2:
-                        collection_date = results2[1]
+                        if results2[1] == "Today":
+                            collection_date = datetime.now().strftime(date_format)
+                        elif results2[1] == "Tomorrow":
+                            collection_date = (
+                                datetime.now() + timedelta(days=1)
+                            ).strftime(date_format)
+                        else:
+                            collection_date = results2[1]
 
                 if collection_date != "":
                     dict_data = {

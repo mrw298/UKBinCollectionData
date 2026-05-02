@@ -50,7 +50,8 @@ class CouncilClass(AbstractGetBinDataClass):
                 f"https://mybins.blackburn.gov.uk/api/mybins/getbincollectiondays?uprn={uprn}&month={current_month}"
                 f"&year={current_year}"
             )
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
             driver.get(url)
 
             soup = BeautifulSoup(driver.page_source, "html.parser")
@@ -67,11 +68,19 @@ class CouncilClass(AbstractGetBinDataClass):
                 for collection in bin_collections:
                     if collection is not None:
                         bin_type = collection[0].get("BinType")
+                        current_collection_date = collection[0].get("CollectionDate")
+                        if current_collection_date is None:
+                            continue
                         current_collection_date = datetime.strptime(
-                            collection[0].get("CollectionDate"), "%Y-%m-%d"
+                            current_collection_date, "%Y-%m-%d"
                         )
+                        next_collection_date = collection[0].get(
+                            "NextScheduledCollectionDate"
+                        )
+                        if next_collection_date is None:
+                            continue
                         next_collection_date = datetime.strptime(
-                            collection[0].get("NextScheduledCollectionDate"), "%Y-%m-%d"
+                            next_collection_date, "%Y-%m-%d"
                         )
 
                         # Work out the most recent collection date to display

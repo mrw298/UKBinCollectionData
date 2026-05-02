@@ -32,7 +32,8 @@ class CouncilClass(AbstractGetBinDataClass):
             user_paon = kwargs.get("paon")
 
             # Create Selenium webdriver
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
             driver.get(page)
 
             # Enter postcode
@@ -80,6 +81,10 @@ class CouncilClass(AbstractGetBinDataClass):
                     raw_next_collection_date = element.find_elements(
                         By.XPATH, ".//div[input]"
                     )[1].text
+
+                    # Skip if the message indicates service suspension
+                    if "suspended" in raw_next_collection_date.lower() or "restarting" in raw_next_collection_date.lower():
+                        continue
 
                     parsed_bin_date = parse(
                         raw_next_collection_date, fuzzy_with_tokens=True
