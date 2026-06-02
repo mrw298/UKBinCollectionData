@@ -1,113 +1,142 @@
 import time
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 
 from bs4 import BeautifulSoup
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait
 
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
-# import the wonderful Beautiful Soup and the URL grabber
+_BIN_TYPES = {
+    "180 litre refuse", "black recycling box", "blue bag", "white bag",
+    "outdoor food caddy", "indoor food caddy", "garden waste",
+    "240 litre refuse", "recycling box", "food caddy",
+}
 
 
 class CouncilClass(AbstractGetBinDataClass):
-    """
-    Concrete classes have to implement all abstract operations of the
-    base class. They can also override some operations with a default
-    implementation.
-    """
-
     def parse_data(self, page: str, **kwargs) -> dict:
         driver = None
         try:
             page = "https://community.fdean.gov.uk/s/waste-collection-enquiry"
-
             data = {"bins": []}
 
             house_number = kwargs.get("paon")
             postcode = kwargs.get("postcode")
-            full_address = f"{house_number}, {postcode}"
+            if house_number and postcode and postcode.upper() not in house_number.upper():
+                full_address = f"{house_number}, {postcode}"
+            else:
+                full_address = house_number or postcode or ""
             web_driver = kwargs.get("web_driver")
             headless = kwargs.get("headless")
 
-            # Create Selenium webdriver
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
             driver.get(page)
 
-            # If you bang in the house number (or property name) and postcode in the box it should find your property
             wait = WebDriverWait(driver, 60)
+            time.sleep(8)
+
             address_entry_field = wait.until(
                 EC.presence_of_element_located(
-                    (By.XPATH, '//*[@id="combobox-input-19"]')
+                    (By.XPATH, "//input[@role='combobox']")
                 )
             )
 
-            address_entry_field.send_keys(str(full_address))
-
-            address_entry_field = wait.until(
-                EC.element_to_be_clickable((By.XPATH, '//*[@id="combobox-input-19"]'))
-            )
             address_entry_field.click()
-            address_entry_field.send_keys(Keys.BACKSPACE)
-            address_entry_field.send_keys(str(full_address[len(full_address) - 1]))
+            time.sleep(1)
+            address_entry_field.send_keys(str(full_address))
+            time.sleep(4)
 
-            first_found_address = wait.until(
+            wait.until(
                 EC.element_to_be_clickable(
-                    (By.XPATH, '//*[@id="dropdown-element-19"]/ul')
+                    (By.XPATH, "//li[@role='presentation']")
                 )
             )
+            all_opts = driver.find_elements(By.XPATH, "//li[@role='presentation']")
+            if len(all_opts) > 1:
+                all_opts[-1].click()
+            else:
+                all_opts[0].click()
+            time.sleep(2)
 
-            first_found_address.click()
-            # Wait for the 'Select your property' dropdown to appear and select the first result
-            next_btn = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//lightning-button/button"))
-            )
-            next_btn.click()
-            bin_data = wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//span[contains(text(), 'Container')]")
+            next_button = wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//button[contains(text(), 'Next')]")
                 )
             )
+            driver.execute_script("arguments[0].click();", next_button)
+
+            for _ in range(8):
+                time.sleep(5)
+                if driver.find_elements(By.XPATH, "//*[contains(text(), 'Collection day')]"):
+                    break
 
             soup = BeautifulSoup(driver.page_source, features="html.parser")
-
+            today = datetime.now()
+            current_year = today.year
             rows = soup.find_all("tr", class_="slds-hint-parent")
-            current_year = datetime.now().year
 
-            for row in rows:
-                columns = row.find_all("td")
-                if columns:
-                    container_type = row.find("th").text.strip()
-                    collection_day = re.sub(
-                        r"[^a-zA-Z0-9,\s]", "", columns[0].get_text()
-                    ).strip()
+            if rows:
+                for row in rows:
+                    try:
+                        th = row.find("th")
+                        td = row.find("td")
+                        if not th or not td:
+                            continue
+                        container_type = (
+                            th.get("data-cell-value", "").strip()
+                            or th.get_text(strip=True)
+                        )
+                        raw_date = (
+                            td.get("data-cell-value", "").strip()
+                            or td.get_text(strip=True)
+                        )
+                        if container_type and raw_date:
+                            data["bins"].append({
+                                "type": container_type,
+                                "collectionDate": self._parse_date(raw_date, current_year),
+                            })
+                    except (ValueError, AttributeError):
+                        continue
+            else:
+                body_text = driver.find_element(By.TAG_NAME, "body").text
+                lines = [l.strip() for l in body_text.split("\n") if l.strip()]
+                for i, line in enumerate(lines):
+                    if line.lower() in _BIN_TYPES and i + 1 < len(lines):
+                        raw_date = lines[i + 1]
+                        if self._looks_like_date(raw_date):
+                            data["bins"].append({
+                                "type": line,
+                                "collectionDate": self._parse_date(raw_date, current_year),
+                            })
 
-                    # Parse the date from the string
-                    parsed_date = datetime.strptime(collection_day, "%a, %d %B")
-                    if parsed_date < datetime(
-                        parsed_date.year, parsed_date.month, parsed_date.day
-                    ):
-                        parsed_date = parsed_date.replace(year=current_year + 1)
-                    else:
-                        parsed_date = parsed_date.replace(year=current_year)
-                    # Format the date as %d/%m/%Y
-                    formatted_date = parsed_date.strftime("%d/%m/%Y")
-
-                    # Add the bin type and collection date to the 'data' dictionary
-                    data["bins"].append(
-                        {"type": container_type, "collectionDate": formatted_date}
-                    )
         except Exception as e:
-            # Here you can log the exception if needed
             print(f"An error occurred: {e}")
-            # Optionally, re-raise the exception if you want it to propagate
             raise
         finally:
-            # This block ensures that the driver is closed regardless of an exception
             if driver:
                 driver.quit()
         return data
+
+    @staticmethod
+    def _looks_like_date(text):
+        t = text.lower().strip()
+        return t in ("today", "tomorrow") or bool(re.match(r"^(mon|tue|wed|thu|fri|sat|sun)", t))
+
+    @staticmethod
+    def _parse_date(raw_date, current_year):
+        t = raw_date.lower().strip()
+        if t == "today":
+            return datetime.now().strftime(date_format)
+        if t == "tomorrow":
+            return (datetime.now() + timedelta(days=1)).strftime(date_format)
+        cleaned = re.sub(r"[^\w\s,]", "", raw_date)
+        parsed = datetime.strptime(cleaned, "%a, %d %B")
+        parsed = parsed.replace(year=current_year)
+        if parsed < datetime.now():
+            parsed = parsed.replace(year=current_year + 1)
+        return parsed.strftime(date_format)

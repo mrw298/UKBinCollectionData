@@ -40,7 +40,7 @@ class CouncilClass(AbstractGetBinDataClass):
         # Set a user agent so we look like a browser ;-)
         user_agent = (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/108.0.0.0 Safari/537.36"
+            "Chrome/134.0.0.0 Safari/537.36"
         )
         headers = {"User-Agent": user_agent}
         requests.packages.urllib3.disable_warnings()
@@ -65,6 +65,23 @@ class CouncilClass(AbstractGetBinDataClass):
             raise
 
     def parse_data(self, page: str, **kwargs: Any) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Parse the council HTML page and return upcoming bin collection dates for the given address.
+        
+        Parameters:
+            page (str): HTML content of the initial council page used to extract the form token.
+            uprn (str): Unique Property Reference Number for the address; required.
+            postcode (str): Postal code for the address; required.
+        
+        Returns:
+            Dict[str, List[Dict[str, str]]]: A dictionary with a single key "bins" mapping to a list of bin objects.
+                Each bin object contains:
+                    - "type": the bin type as displayed on the site (e.g., "General waste").
+                    - "collectionDate": the next collection date formatted according to the module's `date_format`.
+        
+        Raises:
+            ValueError: If `uprn` or `postcode` is not provided.
+        """
         uprn: Optional[str] = kwargs.get("uprn")
         postcode: Optional[str] = kwargs.get("postcode")
 
@@ -95,39 +112,25 @@ class CouncilClass(AbstractGetBinDataClass):
 
         soup = BeautifulSoup(response.text, features="html.parser")
 
-        rows = soup.find("table").find_all("tr")
+        rows = soup.find("table", class_="data-table").find("tbody").find_all("tr")
 
         # Form a JSON wrapper
         data: Dict[str, List[Dict[str, str]]] = {"bins": []}
 
         # Loops the Rows
         for row in rows:
-            cells = row.find_all("td")
-            if cells:
-                bin_type = cells[0].get_text(strip=True)
-                collection_next = cells[1].get_text(strip=True)
+            bin_type = row.find("th").get_text(strip=True)
+            collection_next = row.find("td").get_text(strip=True)
 
-                collection_date = re.findall(r"\(.*?\)", collection_next)
+            collection_date_obj = datetime.strptime(collection_next, "%a %d/%m/%Y")
 
-                if len(collection_date) != 1:
-                    continue
+            # Make each Bin element in the JSON
+            dict_data = {
+                "type": bin_type,
+                "collectionDate": collection_date_obj.strftime(date_format),
+            }
 
-                collection_date_obj = parse(
-                    re.sub(r"[()]", "", collection_date[0])
-                ).date()
-
-                # since we only have the next collection day, if the parsed date is in the past,
-                # assume the day is instead next month
-                if collection_date_obj < datetime.now().date():
-                    collection_date_obj += relativedelta(months=1)
-
-                # Make each Bin element in the JSON
-                dict_data = {
-                    "type": bin_type,
-                    "collectionDate": collection_date_obj.strftime(date_format),
-                }
-
-                # Add data to the main JSON Wrapper
-                data["bins"].append(dict_data)
+            # Add data to the main JSON Wrapper
+            data["bins"].append(dict_data)
 
         return data

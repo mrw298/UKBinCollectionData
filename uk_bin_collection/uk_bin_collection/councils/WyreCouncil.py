@@ -19,9 +19,6 @@ class CouncilClass(AbstractGetBinDataClass):
         user_uprn = kwargs.get("uprn")
         check_uprn(user_uprn)
 
-        user_postcode = kwargs.get("postcode")
-        check_postcode(user_postcode)
-
         data = {"bins": []}
         collections = []
 
@@ -38,20 +35,11 @@ class CouncilClass(AbstractGetBinDataClass):
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
             "sec-fetch-site": "same-origin",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.186 Safari/537.36",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
             "x-requested-with": "XMLHttpRequest",
         }
-        postcode_api = f"https://www.wyre.gov.uk/singlepoint_ajax/{urllib.parse.quote(user_postcode)}"
-        addr_res = requests.post(postcode_api, headers=headers)
-        json_data = addr_res.json()
 
-        for v in json_data.values():
-            v_uprn = v.get("uprn")
-            if v_uprn == user_uprn:
-                addr_line = v.get("label")
-                break
-
-        api_url = f"https://www.wyre.gov.uk/bincollections?uprn={user_uprn}&address={urllib.parse.quote(addr_line)}&submit="
+        api_url = f"https://www.wyre.gov.uk/bincollections?uprn={user_uprn}"
         res = requests.get(api_url, headers=headers)
 
         soup = BeautifulSoup(res.text, features="html.parser")
@@ -60,21 +48,28 @@ class CouncilClass(AbstractGetBinDataClass):
         bins = soup.find_all("div", {"class": "boxed"})
 
         for item in bins:
-            collection_title = " ".join(
-                item.find("h3", {"class": "bin-collection-tasks__heading"}).text.split(
-                    " "
-                )[2:4]
+            heading = item.find("h3", {"class": "bin-collection-tasks__heading"})
+            content = item.find("div", {"class": "bin-collection-tasks__content"})
+            if not heading or not content:
+                continue
+
+            heading_text = " ".join(heading.get_text(" ", strip=True).split())
+            title_match = re.search(
+                r"Your next\s+(.+?)\s+collection", heading_text, re.IGNORECASE
             )
-            collection_date = datetime.strptime(
-                remove_ordinal_indicator_from_date_string(
-                    item.find("div", {"class": "bin-collection-tasks__content"})
-                    .text.strip()
-                    .replace("\n", " ")
-                ),
-                "%A %d %B",
-            )
+            if not title_match:
+                continue
+            collection_title = title_match.group(1).strip()
+
+            date_text = " ".join(content.get_text(" ", strip=True).split())
+            date_text = remove_ordinal_indicator_from_date_string(date_text)
+            try:
+                collection_date = datetime.strptime(date_text, "%A %d %B")
+            except ValueError:
+                continue
+
             next_collection = collection_date.replace(year=datetime.now().year)
-            if datetime.now().month == 12 and next_collection.month == 1:
+            if next_collection.date() < datetime.now().date():
                 next_collection = next_collection + relativedelta(years=1)
             collections.append((collection_title, next_collection))
 

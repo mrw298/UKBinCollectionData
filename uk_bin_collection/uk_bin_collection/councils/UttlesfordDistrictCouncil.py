@@ -1,6 +1,7 @@
 import logging
 import pickle
 import time
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -62,7 +63,24 @@ class CouncilClass(AbstractGetBinDataClass):
             logging.info("Selecting address")
             drop_down_values = Select(input_element_postcode_dd)
 
-            drop_down_values.select_by_visible_text(str(user_paon))
+            # Try exact match first, fall back to house number prefix match
+            matched = False
+            try:
+                drop_down_values.select_by_visible_text(str(user_paon))
+                matched = True
+            except Exception:
+                paon_lower = str(user_paon).strip().lower()
+                for option in drop_down_values.options:
+                    text = option.text.strip().lower()
+                    if text and paon_lower and (text.startswith(paon_lower + " ") or text.startswith(paon_lower + ",") or text == paon_lower):
+                        option.click()
+                        matched = True
+                        break
+
+            if not matched:
+                raise ValueError(
+                    f"Address '{user_paon}' not found in dropdown"
+                )
 
             input_element_address_btn = wait.until(
                 EC.element_to_be_clickable(
@@ -88,15 +106,23 @@ class CouncilClass(AbstractGetBinDataClass):
             for row in rows:
                 cols = row.find_all("td")
                 if len(cols) == 2:
-                    bin_types = [img["alt"] for img in cols[0].find_all("img")]
+                    bin_types = []
+                    for img in cols[0].find_all("img"):
+                        src = img.get("src", "")
+                        filename = src.split("/")[-1]
+                        # Extract color from filename (e.g., "key-brown.png" -> "brown")
+                        bin_type = filename.replace("key-", "").replace(".png", "")
+                        bin_types.append(bin_type)
                     collection_date_str = cols[1].text
                     collection_date_str = remove_ordinal_indicator_from_date_string(
                         collection_date_str
                     )
                     collection_date = datetime.strptime(collection_date_str, "%A %d %B")
-                    collection_date = collection_date.replace(
-                        year=2024
-                    )  # Assuming the year is 2024
+                    now = datetime.now()
+                    current_year = now.year
+                    collection_date = collection_date.replace(year=current_year)
+                    if collection_date.date() < now.date():
+                        collection_date = collection_date.replace(year=current_year + 1)
                     collection_date_str = collection_date.strftime("%d/%m/%Y")
 
                     for bin_type in bin_types:

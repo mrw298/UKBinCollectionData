@@ -1,4 +1,4 @@
-name: Deploy Wiki
+name: Deploy - Wiki
 
 on:
   push:
@@ -22,15 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: wiki
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@v6
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.12'
 
     - name: Run image
-      uses: abatilo/actions-poetry@v3.0.0
+      uses: abatilo/actions-poetry@v4.0.0
       with:
-        poetry-version: '1.8.3'
+        poetry-version: '1.8.4'
 
     - name: Install
       run: make install
@@ -48,7 +48,7 @@ jobs:
       continue-on-error: true
 
     - name: Deploy Wiki Changes
-      uses: Andrew-Chen-Wang/github-wiki-action@v4
+      uses: Andrew-Chen-Wang/github-wiki-action@v5
       with:
         # Make sure WIKI_DIR ends with / as action uses rsync
         path: wiki/

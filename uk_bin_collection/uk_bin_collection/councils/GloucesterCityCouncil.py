@@ -34,20 +34,14 @@ class CouncilClass(AbstractGetBinDataClass):
             check_uprn(user_uprn)
             check_postcode(user_postcode)
             # Create Selenium webdriver
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
             driver.get(page)
 
             cookies_button = WebDriverWait(driver, timeout=15).until(
                 EC.presence_of_element_located((By.ID, "close-cookie-message"))
             )
             cookies_button.click()
-
-            without_login_button = WebDriverWait(driver, timeout=15).until(
-                EC.presence_of_element_located(
-                    (By.LINK_TEXT, "or, Continue with no account")
-                )
-            )
-            without_login_button.click()
 
             iframe_presense = WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located((By.ID, "fillform-frame-1"))
@@ -113,7 +107,7 @@ class CouncilClass(AbstractGetBinDataClass):
                 bin_data["bins"].append(dict_data)
 
             bin_data["bins"].sort(
-                key=lambda x: datetime.strptime(x.get("collectionDate"), "%d/%m/%Y")
+                key=lambda x: datetime.strptime(x.get("collectionDate"), date_format)
             )
 
         except Exception as e:
