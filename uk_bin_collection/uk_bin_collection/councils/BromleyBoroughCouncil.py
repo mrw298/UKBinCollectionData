@@ -8,7 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from uk_bin_collection.uk_bin_collection.common import create_webdriver
+from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
 
@@ -21,7 +21,6 @@ class CouncilClass(AbstractGetBinDataClass):
     """
 
     def parse_data(self, page: str, **kwargs) -> dict:
-        # Make a BS4 object
         driver = None
         try:
             bin_data_dict = {"bins": []}
@@ -31,7 +30,9 @@ class CouncilClass(AbstractGetBinDataClass):
             data = {"bins": []}
 
             # Get our initial session running
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            # the HeadlessChrome useragent is blocked and immediately returns a 503
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
             driver.get(kwargs.get("url"))
 
             wait = WebDriverWait(driver, 30)
@@ -43,57 +44,57 @@ class CouncilClass(AbstractGetBinDataClass):
             soup = BeautifulSoup(driver.page_source, "html.parser")
 
             # Find all elements with class 'govuk-summary-list'
-            waste_services = soup.find_all(
-                "h3", class_="govuk-heading-m waste-service-name"
-            )
+            waste_services = soup.find_all("div", class_="waste-service-grid")
 
             for service in waste_services:
-                service_title = service.get_text(strip=True)
-                next_collection = service.find_next_sibling().find(
-                    "dt", string="Next collection"
+                waste_service_name = service.find(
+                    "h3", class_="govuk-heading-m waste-service-name"
                 )
+                service_title = waste_service_name.get_text(strip=True)
+                list_row = service.find_all("div", class_="govuk-summary-list__row")
+                for row in list_row:
+                    next_collection = row.find("dt", string="Next collection")
 
-                if next_collection:
-                    next_collection_date = next_collection.find_next_sibling().get_text(
-                        strip=True
-                    )
-                    # Extract date part and remove the suffix
-                    next_collection_date_parse = next_collection_date.split(",")[
-                        1
-                    ].strip()
-                    day, month = next_collection_date_parse.split()[:2]
+                    if next_collection:
+                        next_collection_date = (
+                            next_collection.find_next_sibling().get_text(strip=True)
+                        )
+                        # Extract date part and remove the suffix
+                        next_collection_date_parse = next_collection_date.split(",")[
+                            1
+                        ].strip()
+                        day, month = next_collection_date_parse.split()[:2]
 
-                    # Remove the suffix (e.g., 'th', 'nd', 'rd', 'st') from the day
-                    if day.endswith(("th", "nd", "rd", "st")):
-                        day = day[:-2]  # Remove the last two characters
+                        day = remove_ordinal_indicator_from_date_string(day)
 
-                    # Reconstruct the date string without the suffix
-                    date_without_suffix = f"{day} {month}"
+                        # Reconstruct the date string without the suffix
+                        date_without_suffix = f"{day} {month}"
 
-                    # Parse the date string to a datetime object
-                    date_object = datetime.strptime(date_without_suffix, "%d %B")
+                        # Parse the date string to a datetime object
+                        date_object = datetime.strptime(date_without_suffix, "%d %B")
 
-                    # Get the current year
-                    current_year = datetime.now().year
+                        # Get the current year
+                        current_year = datetime.now().year
 
-                    # Check if the parsed date is in the past compared to the current date
-                    if date_object < datetime.now():
-                        # If the parsed date is in the past, assume it's for the next year
-                        current_year += 1
-                    # Append the year to the date
-                    date_with_year = date_object.replace(year=current_year)
+                        # Append the year to the date
+                        date_with_year = date_object.replace(year=current_year)
 
-                    # Format the date with the year
-                    date_with_year_formatted = date_with_year.strftime(
-                        "%d/%m/%Y"
-                    )  # Format the date as '%d/%m/%Y'
+                        # Check if the parsed date is in the past compared to the current date
+                        if date_object < datetime.now():
+                            # If the parsed date is in the past, assume it's for the next year
+                            current_year += 1
 
-                    # Create the dictionary with the formatted data
-                    dict_data = {
-                        "type": service_title,
-                        "collectionDate": date_with_year_formatted,
-                    }
-                    data["bins"].append(dict_data)
+                        # Format the date with the year
+                        date_with_year_formatted = date_with_year.strftime(
+                            "%d/%m/%Y"
+                        )  # Format the date as '%d/%m/%Y'
+
+                        # Create the dictionary with the formatted data
+                        dict_data = {
+                            "type": service_title,
+                            "collectionDate": date_with_year_formatted,
+                        }
+                        data["bins"].append(dict_data)
         except Exception as e:
             # Here you can log the exception if needed
             print(f"An error occurred: {e}")

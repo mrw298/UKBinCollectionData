@@ -1,4 +1,6 @@
+import re
 import time
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 from selenium.webdriver.common.by import By
@@ -9,47 +11,6 @@ from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
 
-def get_seasonal_overrides():
-    url = "https://www.barnet.gov.uk/recycling-and-waste/bin-collections/find-your-bin-collection-day"
-    response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, "html.parser")
-        body_div = soup.find("div", class_="field--name-body")
-        ul_element = body_div.find("ul")
-        if ul_element:
-            li_elements = ul_element.find_all("li")
-            overrides_dict = {}
-            for li_element in li_elements:
-                li_text = li_element.text.strip()
-                li_text = re.sub(r"\([^)]*\)", "", li_text).strip()
-                if "Collections for" in li_text and "will be revised to" in li_text:
-                    parts = li_text.split("will be revised to")
-                    original_date = (
-                        parts[0]
-                        .replace("Collections for", "")
-                        .replace("\xa0", " ")
-                        .strip()
-                    )
-                    revised_date = parts[1].strip()
-
-                    # Extract day and month
-                    date_parts = original_date.split()[1:]
-                    if len(date_parts) == 2:
-                        day, month = date_parts
-                        # Ensure original_date has leading zeros for single-digit days
-                        day = day.zfill(2)
-                        original_date = f"{original_date.split()[0]} {day} {month}"
-
-                    # Store the information in the dictionary
-                    overrides_dict[original_date] = revised_date
-            return overrides_dict
-        else:
-            print("UL element not found within the specified div.")
-    else:
-        print(f"Failed to retrieve the page. Status code: {response.status_code}")
-
-
-# import the wonderful Beautiful Soup and the URL grabber
 class CouncilClass(AbstractGetBinDataClass):
     """
     Concrete classes have to implement all abstract operations of the
@@ -69,152 +30,150 @@ class CouncilClass(AbstractGetBinDataClass):
             check_paon(user_paon)
             headless = kwargs.get("headless")
             web_driver = kwargs.get("web_driver")
-            driver = create_webdriver(web_driver, headless, None, __name__)
-            page = "https://www.barnet.gov.uk/recycling-and-waste/bin-collections/find-your-bin-collection-day"
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
 
-            driver.get(page)
-
-            wait = WebDriverWait(driver, 10)
-            accept_cookies_button = wait.until(
-                EC.element_to_be_clickable(
-                    (
-                        By.XPATH,
-                        "//button[contains(text(), 'Accept additional cookies')]",
-                    )
-                )
-            )
-            accept_cookies_button.click()
-
-            # Wait for the element to be clickable
-            wait = WebDriverWait(driver, 10)
-            find_your_collection_button = wait.until(
-                EC.element_to_be_clickable(
-                    (By.LINK_TEXT, "Find your household collection day")
-                )
+            # Go directly to the Jadu form
+            driver.get(
+                "https://myforms.barnet.gov.uk/homepage/11/find-your-bin-collection-day"
             )
 
-            # Scroll to the element (in case something is blocking it)
-            driver.execute_script(
-                "arguments[0].scrollIntoView();", find_your_collection_button
+            wait = WebDriverWait(driver, 20)
+
+            # Enter postcode
+            postcode_input = wait.until(
+                EC.presence_of_element_located((By.ID, "bin_collection_postcode"))
             )
-
-            # Click the element
-            find_your_collection_button.click()
-
-            try:
-                accept_cookies = WebDriverWait(driver, timeout=10).until(
-                    EC.presence_of_element_located((By.ID, "epdagree"))
-                )
-                accept_cookies.click()
-                accept_cookies_submit = WebDriverWait(driver, timeout=10).until(
-                    EC.presence_of_element_located((By.ID, "epdsubmit"))
-                )
-                accept_cookies_submit.click()
-            except:
-                print(
-                    "Accept cookies banner not found or clickable within the specified time."
-                )
-                pass
-
-            postcode_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, '[aria-label="Postcode"]')
-                )
-            )
-
+            postcode_input.clear()
             postcode_input.send_keys(user_postcode)
 
-            find_address_button = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, '[value="Find address"]'))
-            )
-            driver.execute_script("arguments[0].scrollIntoView();", find_address_button)
-            driver.execute_script("arguments[0].click();", find_address_button)
-            # find_address_button.click()
-
-            time.sleep(15)
-            # Wait for address box to be visible
-            select_address_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (
-                        By.ID,
-                        "MainContent_CUSTOM_FIELD_808562d4b07f437ea751317cabd19d9eeaf8742f49cb4f7fa9bef99405b859f2",
-                    )
+            # Click Find button
+            find_button = wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//button[contains(text(), 'Find')]")
                 )
             )
+            find_button.click()
 
-            # Select address based
-            select = Select(select_address_input)
-            addr_label = f"{user_postcode}, {user_paon},"
-            for addr_option in select.options:
-                option_name = addr_option.accessible_name[0 : len(addr_label)]
-                if option_name == addr_label:
-                    break
-            select.select_by_value(addr_option.text)
-
-            time.sleep(10)
-            # Wait for the specified div to be present
-            target_div_id = "MainContent_CUSTOM_FIELD_808562d4b07f437ea751317cabd19d9ed93a174c32b14f839b65f6abc42d8108_div"
-            target_div = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, target_div_id))
+            # Wait for address dropdown
+            address_select = wait.until(
+                EC.presence_of_element_located((By.ID, "bin_collection_address"))
+            )
+            WebDriverWait(driver, 15).until(
+                lambda d: len(
+                    d.find_element(By.ID, "bin_collection_address").find_elements(
+                        By.TAG_NAME, "option"
+                    )
+                )
+                > 1
             )
 
-            time.sleep(5)
+            # Select address matching house number
+            dropdown = Select(address_select)
+            selected = False
+            paon_str = str(user_paon).upper().strip()
+
+            for option in dropdown.options:
+                option_text = option.text.upper().strip()
+                # Match patterns like "26A Church Hill Road" or "Flat 1, 26A..."
+                if paon_str in option_text:
+                    # More precise: check it starts with the paon or has it after comma
+                    if (
+                        option_text.startswith(paon_str + " ")
+                        or option_text.startswith(paon_str + ",")
+                        or f", {paon_str} " in option_text
+                        or f", {paon_str}," in option_text
+                    ):
+                        dropdown.select_by_value(option.get_attribute("value"))
+                        selected = True
+                        break
+
+            if not selected:
+                # Fallback: select first option containing the paon
+                for option in dropdown.options:
+                    if paon_str in option.text.upper():
+                        dropdown.select_by_value(option.get_attribute("value"))
+                        selected = True
+                        break
+
+            if not selected:
+                raise ValueError(
+                    f"Address not found for postcode {user_postcode} and house number {user_paon}"
+                )
+
+            # Click Find again to get results
+            find_button2 = wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//button[contains(text(), 'Find')]")
+                )
+            )
+            find_button2.click()
+
+            # Wait for bin collection results
+            wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "ul.bin-collections"))
+            )
+
+            time.sleep(2)
+
+            # Parse results
             soup = BeautifulSoup(driver.page_source, "html.parser")
+            bin_data = {"bins": []}
+            current_date = datetime.now()
 
-            # Find the div with the specified id
-            target_div = soup.find("div", {"id": target_div_id})
+            collection_items = soup.select("li.bin-collection")
+            for item in collection_items:
+                try:
+                    heading = item.select_one(".bin-collection__heading")
+                    date_el = item.select_one(".bin-collection__date")
 
-            # Handle the additional table of info for xmas
-            try:
-                overrides_dict = get_seasonal_overrides()
-            except Exception as e:
-                overrides_dict = {}
+                    if heading and date_el:
+                        bin_type = heading.get_text(strip=True)
+                        date_text = date_el.get_text(strip=True).strip()
 
-            # Check if the div is found
-            if target_div:
-                bin_data = {"bins": []}
+                        # Remove ordinal suffixes (1st, 2nd, 3rd, 4th, etc.)
+                        date_text = re.sub(
+                            r"(\d+)(st|nd|rd|th)", r"\1", date_text
+                        )
 
-                for bin_div in target_div.find_all(
-                    "div",
-                    {"style": re.compile("background-color:.*; padding-left: 4px;")},
-                ):
-                    bin_type = bin_div.find("strong").text.strip()
-                    collection_date_string = (
-                        re.search(r"Next collection date:\s+(.*)", bin_div.text)
-                        .group(1)
-                        .strip()
-                        .replace(",", "")
-                    )
-                    if collection_date_string in overrides_dict:
-                        # Replace with the revised date from overrides_dict
-                        collection_date_string = overrides_dict[collection_date_string]
+                        # Parse "Monday, 6 April"
+                        try:
+                            parsed_date = datetime.strptime(
+                                date_text + f" {current_date.year}",
+                                "%A, %d %B %Y",
+                            )
+                            if parsed_date.date() < current_date.date():
+                                parsed_date = parsed_date.replace(
+                                    year=current_date.year + 1
+                                )
+                        except ValueError:
+                            # Try alternative format
+                            parsed_date = datetime.strptime(
+                                date_text + f" {current_date.year}",
+                                "%A %d %B %Y",
+                            )
+                            if parsed_date.date() < current_date.date():
+                                parsed_date = parsed_date.replace(
+                                    year=current_date.year + 1
+                                )
 
-                    current_date = datetime.now()
-                    parsed_date = datetime.strptime(
-                        collection_date_string + f" {current_date.year}", "%A %d %B %Y"
-                    )
-                    # Check if the parsed date is in the past and not today
-                    if parsed_date.date() < current_date.date():
-                        # If so, set the year to the next year
-                        parsed_date = parsed_date.replace(year=current_date.year + 1)
-                    else:
-                        # If not, set the year to the current year
-                        parsed_date = parsed_date.replace(year=current_date.year)
-                    formatted_date = parsed_date.strftime("%d/%m/%Y")
+                        bin_data["bins"].append(
+                            {
+                                "type": bin_type,
+                                "collectionDate": parsed_date.strftime(date_format),
+                            }
+                        )
+                except Exception:
+                    continue
 
-                    contains_date(formatted_date)
-                    bin_info = {"type": bin_type, "collectionDate": formatted_date}
-                    bin_data["bins"].append(bin_info)
-            else:
-                raise ValueError("Collection data not found.")
+            if not bin_data["bins"]:
+                raise ValueError("No bin data found.")
+
+            return bin_data
 
         except Exception as e:
-            # Here you can log the exception if needed
             print(f"An error occurred: {e}")
-            # Optionally, re-raise the exception if you want it to propagate
             raise
         finally:
-            # This block ensures that the driver is closed regardless of an exception
             if driver:
                 driver.quit()
-        return bin_data

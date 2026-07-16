@@ -134,6 +134,32 @@ def test_is_holiday_different_region(mock_holidays_func):
     assert is_holiday(datetime(2023, 11, 30), Region.ENG) is False
 
 
+def test_is_weekend_when_true():
+    weekend_date = datetime(2024, 12, 7)
+    assert is_weekend(weekend_date) is True
+
+
+def test_is_weekend_when_false():
+    weekend_date = datetime(2024, 12, 6)
+    assert is_weekend(weekend_date) is False
+
+
+def test_is_working_day_when_true():
+    working_day_date = datetime(2024, 12, 6)
+    assert is_working_day(working_day_date) is True
+
+
+def test_is_working_day_when_false():
+    working_day_date = datetime(2024, 12, 7)
+    assert is_working_day(working_day_date) is False
+
+
+def test_get_next_working_day():
+    sample_date = datetime(2024, 12, 7)
+    next_working_day = get_next_working_day(sample_date)
+    assert next_working_day == datetime(2024, 12, 9)
+
+
 def test_remove_alpha_characters():
     test_string = "12345abc12345"
     result = remove_alpha_characters(test_string)
@@ -430,8 +456,57 @@ def test_string_with_whitespace_and_numbers():
 )
 def test_get_next_day_of_week(today_str, day_name, expected):
     mock_today = datetime.strptime(today_str, "%Y-%m-%d")
-    with patch('uk_bin_collection.common.datetime') as mock_datetime:  # replace 'your_module' with the actual module name
+    with patch(
+        "uk_bin_collection.common.datetime"
+    ) as mock_datetime:  # replace 'your_module' with the actual module name
         mock_datetime.now.return_value = mock_today
         mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
         result = get_next_day_of_week(day_name, date_format="%m/%d/%Y")
         assert result == expected
+
+
+def test_build_retry_session_defaults():
+    session = build_retry_session()
+    adapter = session.get_adapter("https://example.com")
+    retry = adapter.max_retries
+    assert retry.total == 5
+    assert retry.backoff_factor == 1.5
+    assert retry.status_forcelist == (429, 500, 502, 503, 504)
+    assert retry.allowed_methods == ("GET",)
+
+
+def test_build_retry_session_custom_headers_and_methods():
+    session = build_retry_session(
+        headers={"User-Agent": "test-agent"}, retry_methods=("POST",)
+    )
+    assert session.headers["User-Agent"] == "test-agent"
+    adapter = session.get_adapter("https://example.com")
+    assert adapter.max_retries.allowed_methods == ("POST",)
+
+
+def test_get_scraper_user_agent_uses_installed_version():
+    with patch("uk_bin_collection.common._pkg_version", return_value="1.2.3"):
+        result = get_scraper_user_agent()
+    assert result == (
+        "uk-bin-collection/1.2.3 (+https://github.com/robbrad/UKBinCollectionData)"
+    )
+
+
+def test_get_scraper_user_agent_falls_back_when_not_installed():
+    with patch(
+        "uk_bin_collection.common._pkg_version", side_effect=PackageNotFoundError
+    ):
+        result = get_scraper_user_agent()
+    assert result == (
+        "uk-bin-collection/1.0 (+https://github.com/robbrad/UKBinCollectionData)"
+    )
+
+
+def test_get_scraper_user_agent_custom_fallback():
+    with patch(
+        "uk_bin_collection.common._pkg_version", side_effect=PackageNotFoundError
+    ):
+        result = get_scraper_user_agent(fallback_version="dev")
+    assert result == (
+        "uk-bin-collection/dev (+https://github.com/robbrad/UKBinCollectionData)"
+    )

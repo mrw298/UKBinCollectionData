@@ -18,9 +18,6 @@ class CouncilClass(AbstractGetBinDataClass):
         check_uprn(user_uprn)
 
         # UPRN is passed in via a cookie. Set cookies/params and GET the page
-        cookies = {
-            "SVBINZONE": f"VALE%3AUPRN%40{user_uprn}",
-        }
         headers = {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-GB,en;q=0.7",
@@ -33,18 +30,30 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-User": "?1",
             "Sec-GPC": "1",
             "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         params = {
             "SOVA_TAG": "VALE",
             "ebd": "0",
         }
         requests.packages.urllib3.disable_warnings()
-        response = requests.get(
+        # Azure App Gateway intermittently returns 403 on direct requests.
+        # Establishing a JSESSIONID by visiting the page first (without the
+        # SVBINZONE cookie) avoids this.
+        session = requests.Session()
+        session.headers.update(headers)
+        session.get(
+            "https://eform.whitehorsedc.gov.uk/ebase/BINZONE_DESKTOP.eb?SOVA_TAG=VALE&ebd=0&ebz=1_1780529431339",
+            verify=False,
+            timeout=15,
+        )
+        session.cookies.set("SVBINZONE", f"VALE%3AUPRN%40{user_uprn}")
+        response = session.get(
             "https://eform.whitehorsedc.gov.uk/ebase/BINZONE_DESKTOP.eb",
             params=params,
             headers=headers,
-            cookies=cookies,
+            verify=False,
+            timeout=15,
         )
 
         # Parse response text for super speedy finding
@@ -52,6 +61,9 @@ class CouncilClass(AbstractGetBinDataClass):
         soup.prettify()
 
         data = {"bins": []}
+
+        current_year = datetime.now().year
+        next_year = current_year + 1
 
         # Page has slider info side by side, which are two instances of this class
         for bin in soup.find_all("div", {"class": "bintxt"}):
@@ -74,23 +86,31 @@ class CouncilClass(AbstractGetBinDataClass):
                 if contains_date(bin_date_info[0]):
                     bin_date = get_next_occurrence_from_day_month(
                         datetime.strptime(
-                            bin_date_info[0] + " " + datetime.today().strftime("%Y"),
-                            "%A %d %B - %Y",
+                            bin_date_info[0],
+                            "%A %d %B -",
                         )
-                    ).strftime(date_format)
+                    )
                 # On exceptional collection schedule (e.g. around English Bank Holidays), date will be contained in the second stripped string
                 else:
                     bin_date = get_next_occurrence_from_day_month(
                         datetime.strptime(
-                            bin_date_info[1] + " " + datetime.today().strftime("%Y"),
-                            "%A %d %B - %Y",
+                            bin_date_info[1],
+                            "%A %d %B -",
                         )
-                    ).strftime(date_format)
+                    )
             except Exception as ex:
                 raise ValueError(f"Error parsing bin data: {ex}")
 
+            if (datetime.now().month == 12) and (bin_date.month == 1):
+                bin_date = bin_date.replace(year=next_year)
+            else:
+                bin_date = bin_date.replace(year=current_year)
+
             # Build data dict for each entry
-            dict_data = {"type": bin_type, "collectionDate": bin_date}
+            dict_data = {
+                "type": bin_type,
+                "collectionDate": bin_date.strftime(date_format),
+            }
             data["bins"].append(dict_data)
 
         data["bins"].sort(

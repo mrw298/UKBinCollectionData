@@ -32,13 +32,14 @@ class CouncilClass(AbstractGetBinDataClass):
             check_postcode(user_postcode)
 
             # Create Selenium webdriver
-            driver = create_webdriver(web_driver, headless, None, __name__)
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            driver = create_webdriver(web_driver, headless, user_agent, __name__)
             driver.get("https://www.westberks.gov.uk/binday")
 
             # Wait for the postcode field to appear then populate it
             inputElement_postcode = WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located(
-                    (By.ID, "FINDYOURBINDAYS_ADDRESSLOOKUPPOSTCODE")
+                    (By.ID, "FINDYOURBINDAYS3WEEKLY_ADDRESSLOOKUPPOSTCODE")
                 )
             )
             inputElement_postcode.send_keys(user_postcode)
@@ -46,7 +47,7 @@ class CouncilClass(AbstractGetBinDataClass):
             # Click search button
             findAddress = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located(
-                    (By.ID, "FINDYOURBINDAYS_ADDRESSLOOKUPSEARCH")
+                    (By.ID, "FINDYOURBINDAYS3WEEKLY_ADDRESSLOOKUPSEARCH")
                 )
             )
             findAddress.click()
@@ -56,7 +57,7 @@ class CouncilClass(AbstractGetBinDataClass):
                     (
                         By.XPATH,
                         ""
-                        "//*[@id='FINDYOURBINDAYS_ADDRESSLOOKUPADDRESS']//option[contains(., '"
+                        "//*[@id='FINDYOURBINDAYS3WEEKLY_ADDRESSLOOKUPADDRESS']//option[contains(., '"
                         + user_paon
                         + "')]",
                     )
@@ -66,7 +67,10 @@ class CouncilClass(AbstractGetBinDataClass):
             # Wait for the submit button to appear, then click it to get the collection dates
             WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, '//*[@id="FINDYOURBINDAYS_RUBBISHDATE"]/div')
+                    (
+                        By.XPATH,
+                        '//*[@id="FINDYOURBINDAYS3WEEKLY_RUBBISHRECYCLEFOODDATE"]/div',
+                    )
                 )
             )
             time.sleep(2)
@@ -74,47 +78,37 @@ class CouncilClass(AbstractGetBinDataClass):
             soup = BeautifulSoup(driver.page_source, features="html.parser")
             soup.prettify()
 
-            rubbish_div = soup.find(
-                "div", {"id": "FINDYOURBINDAYS_RUBBISHDATE_OUTERDIV"}
+            rubbish_div = soup.find("div", {"class": "rubbish_collection_difs_black"})
+            rubbish_date = rubbish_div.find(
+                "div", {"class": "rubbish_date_container_left_datetext"}
             )
-            try:
-                rubbish_date = rubbish_div.find_all("div")[2]
+            if rubbish_date.text == "Today":
+                rubbish_date = datetime.now()
+            else:
                 rubbish_date = datetime.strptime(
                     rubbish_date.text,
                     "%A %d %B",
                 ).replace(year=datetime.now().year)
-            except:
-                rubbish_date = rubbish_div.find_all("div")[3]
-                rubbish_date = datetime.strptime(
-                    rubbish_date.text,
-                    "%A %d %B",
-                ).replace(year=datetime.now().year)
-            recycling_div = soup.find(
-                "div", {"id": "FINDYOURBINDAYS_RECYCLINGDATE_OUTERDIV"}
+
+            recycling_div = soup.find("div", {"class": "rubbish_collection_difs_green"})
+            recycling_date = recycling_div.find(
+                "div", {"class": "rubbish_date_container_left_datetext"}
             )
-            try:
-                recycling_date = recycling_div.find_all("div")[2]
+            if recycling_date.text == "Today":
+                recycling_date = datetime.now()
+            else:
                 recycling_date = datetime.strptime(
                     recycling_date.text,
                     "%A %d %B",
                 ).replace(year=datetime.now().year)
-            except:
-                rubbish_date = recycling_div.find_all("div")[3]
-                rubbish_date = datetime.strptime(
-                    rubbish_date.text,
-                    "%A %d %B",
-                ).replace(year=datetime.now().year)
-            food_div = soup.find(
-                "div", {"id": "FINDYOURBINDAYS_RECYCLINGDATE_OUTERDIV"}
+
+            food_div = soup.find("div", {"class": "rubbish_collection_difs_purple"})
+            food_date = food_div.find(
+                "div", {"class": "rubbish_date_container_left_datetext"}
             )
-            try:
-                food_date = food_div.find_all("div")[2]
-                food_date = datetime.strptime(
-                    food_date.text,
-                    "%A %d %B",
-                ).replace(year=datetime.now().year)
-            except:
-                food_date = food_div.find_all("div")[3]
+            if food_date.text == "Today":
+                food_date = datetime.now()
+            else:
                 food_date = datetime.strptime(
                     food_date.text,
                     "%A %d %B",
