@@ -27,7 +27,7 @@ class CouncilClass(AbstractGetBinDataClass):
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-site",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         }
         requests.packages.urllib3.disable_warnings()
         response = requests.get(
@@ -46,7 +46,8 @@ class CouncilClass(AbstractGetBinDataClass):
                     "type": bin_type,
                     "collectionDate": get_next_occurrence_from_day_month(
                         datetime.strptime(
-                            c["BinCollectionDate"].replace(" (*)", "").strip()
+                            remove_ordinal_indicator_from_date_string(
+                                c["BinCollectionDate"].replace(" (*)", "").strip())
                             + " "
                             + datetime.now().strftime("%Y"),
                             "%A %d %B %Y",

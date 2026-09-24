@@ -15,7 +15,15 @@ class CouncilClass(AbstractGetBinDataClass):
 
         api_url = f"https://maps.westsuffolk.gov.uk/MyWestSuffolk.aspx?action=SetAddress&UniqueId={user_uprn}"
 
-        response = requests.get(api_url)
+        # West Suffolk's IIS now returns 404 to requests without a User-Agent,
+        # so send a realistic browser UA to get a valid response.
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+            )
+        }
+        response = requests.get(api_url, headers=headers)
 
         soup = BeautifulSoup(response.text, features="html.parser")
         soup.prettify()
@@ -31,8 +39,11 @@ class CouncilClass(AbstractGetBinDataClass):
             if tag_class is None:
                 return False
 
+            # The header was renamed from "Bin collection days" to
+            # "Bin collection days current"; match as a substring so the
+            # scraper survives either label.
             parent_has_header = cur_tag.parent.find_all(
-                "h4", string="Bin collection days"
+                "h4", string=lambda s: s and "Bin collection days" in s
             )
             if len(parent_has_header) < 1:
                 return False
@@ -44,6 +55,16 @@ class CouncilClass(AbstractGetBinDataClass):
         # Parse the resultant div
         for tag in collection_tag:
             text_list = list(tag.stripped_strings)
+            
+            # Filter out any empty strings or whitespace-only entries
+            text_list = [text.strip() for text in text_list if text.strip()]
+            
+            # Check if we have an even number of elements
+            if len(text_list) % 2 != 0:
+                # If odd number, log warning and skip the last element
+                # This handles cases where there's extra text or a missing date
+                text_list = text_list[:-1]
+            
             # Create and parse the list as tuples of name:date
             for bin_name, collection_date in itertools.batched(text_list, 2):
                 try:

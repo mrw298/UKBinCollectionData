@@ -1,40 +1,513 @@
+"""The UK Bin Collection integration."""
+
+import asyncio
+import inspect
+import logging
+from datetime import timedelta
+import json
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-import logging
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+from datetime import datetime
+
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    CONFIG_ENTRY_VERSION,
+    DOMAIN,
+    LOG_PREFIX,
+    PLATFORMS,
+    EXCLUDED_ARG_KEYS,
+    redact_config_data,
+)
+from uk_bin_collection.uk_bin_collection.collect_data import UKBinCollectionApp
+
+
+from homeassistant.helpers import config_validation as cv
+
+PLATFORM_SCHEMA = cv.platform_only_config_schema
 
 _LOGGER = logging.getLogger(__name__)
 
-from .const import DOMAIN, LOG_PREFIX, PLATFORMS
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the UK Bin Collection component."""
+    _LOGGER.debug(
+        "%s async_setup called with config: %s",
+        LOG_PREFIX,
+        redact_config_data(config),
+    )
+    try:
+        hass.data.setdefault(DOMAIN, {})
+        _LOGGER.debug(
+            f"{LOG_PREFIX} hass.data[DOMAIN] initialized: {hass.data[DOMAIN]}"
+        )
+
+        async def handle_manual_refresh(call):
+            """Refresh all bin sensors for a given config entry."""
+            _LOGGER.debug(
+                f"{LOG_PREFIX} manual_refresh service called with data: {call.data}"
+            )
+            entry_id = call.data.get("entry_id")
+
+            if not entry_id:
+                _LOGGER.error(
+                    "[UKBinCollection] No 'entry_id' was passed to uk_bin_collection.manual_refresh service."
+                )
+                return
+
+            if entry_id not in hass.data[DOMAIN]:
+                _LOGGER.error(
+                    "[UKBinCollection] No config entry found for entry_id: %s", entry_id
+                )
+                return
+
+            coordinator = hass.data[DOMAIN][entry_id].get("coordinator")
+            if not coordinator:
+                _LOGGER.error(
+                    "[UKBinCollection] Coordinator is missing for entry_id: %s",
+                    entry_id,
+                )
+                return
+
+            _LOGGER.debug(
+                "[UKBinCollection] About to request a manual refresh via coordinator"
+            )
+            await coordinator.async_request_refresh()
+            _LOGGER.debug("[UKBinCollection] Manual refresh completed")
+
+        # Register a service named `uk_bin_collection.manual_refresh`
+        _LOGGER.debug("[UKBinCollection] Registering manual_refresh service")
+        hass.services.async_register(
+            DOMAIN, "manual_refresh", handle_manual_refresh  # The service name
+        )
+        _LOGGER.debug(
+            "[UKBinCollection] manual_refresh service registered successfully"
+        )
+
+        _LOGGER.info("[UKBinCollection] async_setup completed without errors.")
+        return True
+
+    except Exception as exc:
+        _LOGGER.exception("%s Unexpected error in async_setup: %s", LOG_PREFIX, exc)
+        return False
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up UK Bin Collection Data from a config entry."""
-    _LOGGER.info(LOG_PREFIX + "Data Supplied: %s", entry.data)
-    council_name = entry.data.get("council", "unknown council")
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old config entries to the current version."""
+    try:
+        version = config_entry.version
+        _LOGGER.debug(
+            f"{LOG_PREFIX} async_migrate_entry called for entry_id={config_entry.entry_id}, version={version}"
+        )
+
+        if version > CONFIG_ENTRY_VERSION:
+            # Downgrading from a newer schema is not supported.
+            _LOGGER.error(
+                "%s Cannot downgrade config entry %s from version %s to %s.",
+                LOG_PREFIX,
+                config_entry.entry_id,
+                version,
+                CONFIG_ENTRY_VERSION,
+            )
+            return False
+
+        if version == CONFIG_ENTRY_VERSION:
+            _LOGGER.debug(
+                f"{LOG_PREFIX} No migration needed for entry_id={config_entry.entry_id}"
+            )
+            return True
+
+        _LOGGER.info(
+            f"{LOG_PREFIX} Migrating config entry {config_entry.entry_id} from version {version} to {CONFIG_ENTRY_VERSION}."
+        )
+
+        data = dict(config_entry.data)
+
+        # v1 -> v2: ensure an update_interval default exists.
+        if version < 2 and "update_interval" not in data:
+            data["update_interval"] = 12
+            _LOGGER.debug(
+                f"{LOG_PREFIX} 'update_interval' not found. Setting default to 12 hours."
+            )
+
+        # v3 -> v4: replace the legacy, inverted `manual_refresh_only` flag with
+        # the positive `auto_refresh_enabled` flag.
+        #
+        # The meaning of the stored `manual_refresh_only` value became ambiguous
+        # when its runtime logic was flipped (commit 4c2a9924, released in
+        # 0.171.0) without a data migration: before the flip `True` enabled
+        # automatic polling, after the flip `True` disabled it. We therefore
+        # cannot reliably infer the user's intent from the stored value. To
+        # guarantee the "sensors only update on restart" regression is resolved
+        # for every existing install, enable automatic refresh on migration.
+        # Users who genuinely want manual-only can untick the now
+        # correctly-labelled "Enable automatic data refresh" option.
+        if "manual_refresh_only" in data or "auto_refresh_enabled" not in data:
+            data.pop("manual_refresh_only", None)
+            data["auto_refresh_enabled"] = True
+            _LOGGER.info(
+                "%s Enabled automatic refresh for entry %s during migration.",
+                LOG_PREFIX,
+                config_entry.entry_id,
+            )
+
+        hass.config_entries.async_update_entry(
+            config_entry, data=data, version=CONFIG_ENTRY_VERSION
+        )
+
+        _LOGGER.info(
+            f"{LOG_PREFIX} Migration of config entry {config_entry.entry_id} to version {CONFIG_ENTRY_VERSION} successful."
+        )
+
+        return True
+
+    except Exception as exc:
+        _LOGGER.exception(
+            "%s Unexpected error during async_migrate_entry: %s", LOG_PREFIX, exc
+        )
+        return False
+
+
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Set up UK Bin Collection from a config entry."""
     _LOGGER.info(
-        LOG_PREFIX + "Setting up UK Bin Collection Data for council: %s", council_name
+        f"{LOG_PREFIX} async_setup_entry called for entry_id={config_entry.entry_id}"
     )
 
-    hass.data.setdefault(DOMAIN, {})
+    try:
+        name = config_entry.data.get("name")
+        if not name:
+            _LOGGER.error(f"{LOG_PREFIX} 'name' is missing in config entry.")
+            raise ConfigEntryNotReady("Missing 'name' in configuration.")
 
-    if entry.unique_id is None:
-        name = entry.data["name"]
-        hass.config_entries.async_update_entry(entry, unique_id=f"{name}")
+        timeout = config_entry.data.get("timeout", 60)
+        # Migration (async_migrate_entry) rewrites every entry to carry
+        # `auto_refresh_enabled`, so it is normally always present here. Default
+        # to True as a safe fallback: if the flag is somehow missing we prefer
+        # automatic polling over silently leaving the sensor stale.
+        auto_refresh_enabled = config_entry.data.get("auto_refresh_enabled", True)
+        update_interval_hours = config_entry.data.get("update_interval", 12)
 
-    _LOGGER.info(LOG_PREFIX + "Config entry data: %s", entry.data)
+        _LOGGER.debug(
+            f"{LOG_PREFIX} Retrieved configuration: "
+            f"configuration={redact_config_data(config_entry.data)}, "
+            f"timeout={timeout}, "
+            f"auto_refresh_enabled={auto_refresh_enabled}, "
+            f"update_interval={update_interval_hours} hours"
+        )
 
-    async def _async_finish_startup(_):
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        # Validate 'timeout'
+        try:
+            timeout = int(timeout)
+            if timeout < 10:
+                _LOGGER.warning(
+                    f"{LOG_PREFIX} Timeout value {timeout} is less than 10. Setting to 10 seconds."
+                )
+                timeout = 10
+        except (ValueError, TypeError):
+            _LOGGER.warning(
+                f"{LOG_PREFIX} Invalid timeout value: {timeout}. Using default 60 seconds."
+            )
+            timeout = 60
 
-    hass.async_create_task(_async_finish_startup(None))
+        # Decide update interval based on auto_refresh_enabled
+        if not auto_refresh_enabled:
+            update_interval = None
+            _LOGGER.info(
+                "%s Manual refresh only: no automatic updates scheduled.", LOG_PREFIX
+            )
+        else:
+            try:
+                update_interval_hours = int(update_interval_hours)
+                if update_interval_hours < 1:
+                    update_interval_hours = 12
+            except (ValueError, TypeError):
+                update_interval_hours = 12
+            update_interval = timedelta(hours=update_interval_hours)
+            _LOGGER.info(
+                "%s Automatic refresh every %s hour(s).",
+                LOG_PREFIX,
+                update_interval_hours,
+            )
 
-    _LOGGER.info(
-        LOG_PREFIX + "Successfully set up UK Bin Collection Data for council: %s",
-        council_name,
-    )
-    return True
+        # Prepare arguments for UKBinCollectionApp
+        args = build_ukbcd_args(config_entry.data)
+        _LOGGER.debug(
+            "%s UKBinCollectionApp arguments prepared (%d values).",
+            LOG_PREFIX,
+            len(args),
+        )
+
+        # Initialize the UK Bin Collection Data application
+        ukbcd = UKBinCollectionApp()
+        ukbcd.set_args(args)
+        _LOGGER.debug(f"{LOG_PREFIX} UKBinCollectionApp initialized and arguments set.")
+
+        # Initialize the data coordinator
+        coordinator = HouseholdBinCoordinator(
+            hass,
+            ukbcd,
+            name,
+            config_entry=config_entry,
+            timeout=timeout,
+            update_interval=update_interval,
+        )
+
+        _LOGGER.debug(
+            f"{LOG_PREFIX} HouseholdBinCoordinator initialized with update_interval={update_interval}."
+        )
+
+        # Perform first refresh
+        await coordinator.async_config_entry_first_refresh()
+        _LOGGER.info(
+            f"{LOG_PREFIX} Initial data fetched successfully for entry_id={config_entry.entry_id}"
+        )
+
+        # Store the coordinator in Home Assistant's data
+        hass.data[DOMAIN][config_entry.entry_id] = {"coordinator": coordinator}
+        _LOGGER.debug(
+            f"{LOG_PREFIX} Coordinator stored in hass.data under entry_id={config_entry.entry_id}"
+        )
+
+        # Forward the setup to all platforms (sensor and calendar)
+        _LOGGER.debug(f"{LOG_PREFIX} Forwarding setup to platforms: {PLATFORMS}")
+        await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+
+        _LOGGER.info(
+            f"{LOG_PREFIX} async_setup_entry finished for entry_id={config_entry.entry_id}"
+        )
+        return True
+
+    except UpdateFailed as e:
+        _LOGGER.error(f"{LOG_PREFIX} Unable to fetch initial data: {e}")
+        raise ConfigEntryNotReady from e
+
+    except Exception as exc:
+        _LOGGER.exception(
+            "%s Unexpected error in async_setup_entry: %s", LOG_PREFIX, exc
+        )
+        raise ConfigEntryNotReady from exc
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    _LOGGER.info(f"{LOG_PREFIX} Unloading config entry {config_entry.entry_id}")
+    unload_ok = True
+
+    try:
+        for platform in PLATFORMS:
+            platform_unload_ok = await hass.config_entries.async_forward_entry_unload(
+                config_entry, platform
+            )
+            if not platform_unload_ok:
+                _LOGGER.warning(
+                    f"{LOG_PREFIX} Failed to unload '{platform}' platform for entry_id={config_entry.entry_id}"
+                )
+                unload_ok = False
+            else:
+                _LOGGER.debug(
+                    f"{LOG_PREFIX} Successfully unloaded '{platform}' for entry_id={config_entry.entry_id}"
+                )
+
+        if unload_ok:
+            hass.data[DOMAIN].pop(config_entry.entry_id, None)
+            _LOGGER.debug(
+                f"{LOG_PREFIX} Removed coordinator for entry_id={config_entry.entry_id}"
+            )
+        else:
+            _LOGGER.warning(
+                f"{LOG_PREFIX} One or more platforms failed to unload for entry_id={config_entry.entry_id}"
+            )
+
+    except Exception as exc:
+        _LOGGER.exception(
+            "%s Unexpected error in async_unload_entry: %s", LOG_PREFIX, exc
+        )
+        unload_ok = False
+
+    return unload_ok
+
+
+def build_ukbcd_args(config_data: dict) -> list:
+    """Build the argument list for UKBinCollectionApp from config data."""
+    council = config_data.get("original_parser") or config_data.get("council", "")
+    url = config_data.get("url", "")
+    args = [council, url]
+
+    # Per-key formatters: return a list of CLI args for that key
+    def _format_headless(v):
+        return ["--headless"] if v else ["--not-headless"]
+
+    def _format_web_driver(v):
+        return [f"--web_driver={v.rstrip('/')}"] if v is not None else []
+
+    formatters = {
+        "headless": _format_headless,
+        "web_driver": _format_web_driver,
+    }
+
+    for key, value in config_data.items():
+        if key in EXCLUDED_ARG_KEYS:
+            continue
+        fmt = formatters.get(key)
+        if fmt:
+            args.extend(fmt(value))
+        else:
+            args.append(f"--{key}={value}")
+
+    return args
+
+
+class HouseholdBinCoordinator(DataUpdateCoordinator):
+    """Coordinator to manage fetching and updating UK Bin Collection data."""
+
+    # DataUpdateCoordinator only accepts `config_entry` from Home Assistant
+    # 2024.11.0 onward - older cores raise TypeError on an unknown kwarg. This
+    # integration documents support back to HA 2023.10.0, so only pass it
+    # through when the installed core actually supports it; otherwise fall
+    # back to the coordinator's own (deprecated but still functional) default
+    # of resolving the entry from a ContextVar.
+    _SUPPORTS_CONFIG_ENTRY_KWARG = (
+        "config_entry" in inspect.signature(DataUpdateCoordinator.__init__).parameters
+    )
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        ukbcd: UKBinCollectionApp,
+        name: str,
+        config_entry: ConfigEntry | None = None,
+        timeout: int = 60,
+        update_interval: timedelta = timedelta(hours=12),
+    ) -> None:
+        """Initialize the data coordinator."""
+        extra_kwargs = (
+            {"config_entry": config_entry} if self._SUPPORTS_CONFIG_ENTRY_KWARG else {}
+        )
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="UK Bin Collection Data",
+            update_interval=update_interval,
+            **extra_kwargs,
+        )
+        self.ukbcd = ukbcd
+        self.name = name
+        self.timeout = timeout
+
+        self._last_good_data = {}
+
+        _LOGGER.debug(
+            "%s HouseholdBinCoordinator initialized (timeout=%s, update_interval=%s).",
+            LOG_PREFIX,
+            timeout,
+            update_interval,
+        )
+
+    async def _async_update_data(self) -> dict:
+        """Fetch and process the latest bin collection data."""
+        _LOGGER.debug(f"{LOG_PREFIX} _async_update_data called.")
+        _LOGGER.info(
+            f"{LOG_PREFIX} Fetching latest bin collection data with timeout={self.timeout}"
+        )
+
+        try:
+            data = await asyncio.wait_for(
+                self.hass.async_add_executor_job(self.ukbcd.run),
+                timeout=self.timeout,
+            )
+            _LOGGER.debug("%s Raw bin data fetched from ukbcd.run().", LOG_PREFIX)
+
+            parsed_data = json.loads(data)
+            _LOGGER.debug("%s JSON response parsed successfully.", LOG_PREFIX)
+
+            processed_data = self.process_bin_data(parsed_data)
+
+            if not processed_data:
+                _LOGGER.warning(
+                    f"{LOG_PREFIX} No bin data found. Using last known good data."
+                )
+                if self._last_good_data:
+                    return self._last_good_data
+                else:
+                    _LOGGER.warning(f"{LOG_PREFIX} No previous data to fall back to.")
+                    return {}
+
+            self._last_good_data = processed_data
+            _LOGGER.debug(
+                "%s Processed %d bin collection entries.",
+                LOG_PREFIX,
+                len(processed_data),
+            )
+
+            _LOGGER.info(f"{LOG_PREFIX} Bin collection data updated successfully.")
+            return processed_data
+
+        except asyncio.TimeoutError as exc:
+            _LOGGER.error(f"{LOG_PREFIX} Timeout while updating data: {exc}")
+            raise UpdateFailed(f"Timeout while updating data: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            _LOGGER.error(f"{LOG_PREFIX} JSON decode error: {exc}")
+            raise UpdateFailed(f"JSON decode error: {exc}") from exc
+        except Exception as exc:
+            _LOGGER.exception(f"{LOG_PREFIX} Unexpected error: {exc}")
+            raise UpdateFailed(f"Unexpected error: {exc}") from exc
+
+    @staticmethod
+    def process_bin_data(data: dict) -> dict:
+        """Process raw data to determine the next collection dates."""
+        _LOGGER.debug("%s Processing bin collection response.", LOG_PREFIX)
+
+        current_date = dt_util.now().date()
+        next_collection_dates = {}
+
+        bins = data.get("bins", [])
+        _LOGGER.debug("%s Bins found: %d", LOG_PREFIX, len(bins))
+        for bin_data in bins:
+            bin_type = bin_data.get("type")
+            collection_date_str = bin_data.get("collectionDate")
+            _LOGGER.debug("%s Processing a bin collection entry.", LOG_PREFIX)
+
+            if not bin_type or not collection_date_str:
+                _LOGGER.warning(
+                    f"{LOG_PREFIX} Missing 'type' or 'collectionDate' in bin data: {bin_data}"
+                )
+                continue
+
+            try:
+                collection_date = datetime.strptime(
+                    collection_date_str, "%d/%m/%Y"
+                ).date()
+            except (ValueError, TypeError) as exc:
+                _LOGGER.warning(
+                    f"{LOG_PREFIX} Invalid date format '{collection_date_str}' for bin type '{bin_type}'. Error: {exc}"
+                )
+                continue
+
+            if (
+                collection_date < current_date
+                and current_date.month == 12
+                and collection_date.month == 1
+            ):
+                collection_date = collection_date.replace(year=current_date.year + 1)
+                _LOGGER.debug(
+                    f"{LOG_PREFIX} Corrected rollover year for '{bin_type}' to {collection_date}"
+                )
+
+            existing_date = next_collection_dates.get(bin_type)
+            if collection_date >= current_date and (
+                not existing_date or collection_date < existing_date
+            ):
+                next_collection_dates[bin_type] = collection_date
+                _LOGGER.debug(
+                    f"{LOG_PREFIX} Updated next collection for '{bin_type}' to {collection_date}"
+                )
+
+        _LOGGER.debug(
+            f"{LOG_PREFIX} Final next_collection_dates={next_collection_dates}"
+        )
+        return next_collection_dates

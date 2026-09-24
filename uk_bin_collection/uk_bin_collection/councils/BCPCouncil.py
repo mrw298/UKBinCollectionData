@@ -1,8 +1,8 @@
-import json
-from datetime import timedelta
+import time
 
 import requests
-from bs4 import BeautifulSoup
+from dateutil.relativedelta import relativedelta
+
 from uk_bin_collection.uk_bin_collection.common import *
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
@@ -16,36 +16,43 @@ class CouncilClass(AbstractGetBinDataClass):
     """
 
     def parse_data(self, page: str, **kwargs) -> dict:
+        # Make a BS4 object
+        uprn = kwargs.get("uprn")
+        # usrn = kwargs.get("paon")
+        check_uprn(uprn)
+        # check_usrn(usrn)
+        bindata = {"bins": []}
 
-        user_uprn = kwargs.get("uprn")
-        check_uprn(user_uprn)
+        # uprn = uprn.zfill(12)
 
-        api_url = f"https://online.bcpcouncil.gov.uk/bcp-apis/?api=BinDayLookup&uprn={user_uprn}"
+        API_URL = "https://prod-17.uksouth.logic.azure.com/workflows/58253d7b7d754447acf9fe5fcf76f493/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=TAvYIUFj6dzaP90XQCm2ElY6Cd34ze05I3ba7LKTiBs"
 
-        requests.packages.urllib3.disable_warnings()
-        response = requests.get(api_url)
-        json_data = json.loads(response.text)
-        data = {"bins": []}
-        collections = []
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "*/*",
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://bcpportal.bcpcouncil.gov.uk/",
+        }
+        s = requests.session()
+        data = {
+            "uprn": uprn,
+        }
 
-        for bin in json_data:
-            bin_type = bin["BinType"]
-            next_date = datetime.strptime(
-                bin["Next"], "%m/%d/%Y %I:%M:%S %p"
-            ) + timedelta(hours=1)
-            subseq_date = datetime.strptime(
-                bin["Subsequent"], "%m/%d/%Y %I:%M:%S %p"
-            ) + timedelta(hours=1)
-            collections.append((bin_type, next_date))
-            collections.append((bin_type, subseq_date))
+        r = s.post(API_URL, json=data, headers=headers)
+        r.raise_for_status()
 
-        ordered_data = sorted(collections, key=lambda x: x[1])
-        data = {"bins": []}
-        for item in ordered_data:
-            dict_data = {
-                "type": item[0],
-                "collectionDate": item[1].strftime(date_format),
-            }
-            data["bins"].append(dict_data)
+        data = r.json()
+        rows_data = data["data"]
+        for row in rows_data:
+            bin_type = row["wasteContainerUsageTypeDescription"]
+            collections = row["scheduleDateRange"]
+            for collection in collections:
+                dict_data = {
+                    "type": bin_type,
+                    "collectionDate": datetime.strptime(
+                        collection, "%Y-%m-%d"
+                    ).strftime(date_format),
+                }
+                bindata["bins"].append(dict_data)
 
-        return data
+        return bindata

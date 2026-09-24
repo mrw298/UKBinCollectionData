@@ -4,15 +4,17 @@ import os
 import re
 from datetime import datetime, timedelta
 from enum import Enum
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 import holidays
 import pandas as pd
 import requests
 from dateutil.parser import parse
+from requests.adapters import HTTPAdapter
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.service import Service as ChromeService
 from urllib3.exceptions import MaxRetryError
+from urllib3.util.retry import Retry
 from webdriver_manager.chrome import ChromeDriverManager
 
 date_format = "%d/%m/%Y"
@@ -106,6 +108,7 @@ def get_date_with_ordinal(date_number: int) -> str:
         else {1: "st", 2: "nd", 3: "rd"}.get(date_number % 10, "th")
     )
 
+
 def has_numbers(inputString: str) -> bool:
     """
 
@@ -159,6 +162,35 @@ def is_holiday(date_to_check: datetime, region: Region = Region.ENG) -> bool:
         return True
     else:
         return False
+
+
+def is_weekend(date_to_check: datetime) -> bool:
+    """
+    Checks if a given date is a weekend
+    :param date_to_check: Date to check if it falls on a weekend
+    :return: Bool - true if a weekend day, false if not
+    """
+    return True if date_to_check.date().weekday() >= 5 else False
+
+
+def is_working_day(date_to_check: datetime, region: Region = Region.ENG) -> bool:
+    """
+    Wraps is_holiday() and is_weekend() into one function
+    :param date_to_check: Date to check if holiday
+    :param region: The UK nation to check. Defaults to ENG.
+    :return: Bool - true if a working day (non-holiday, Mon-Fri).
+    """
+    return (
+        False
+        if is_holiday(date_to_check, region) or is_weekend(date_to_check)
+        else True
+    )
+
+
+def get_next_working_day(date: datetime, region: Region = Region.ENG) -> datetime:
+    while not is_working_day(date, region):
+        date += timedelta(days=1)
+    return date
 
 
 def get_weekday_dates_in_period(start: datetime, day_of_week: int, amount=8) -> list:
@@ -230,6 +262,10 @@ def update_input_json(council: str, url: str, input_file_path: str, **kwargs):
     try:
         data = load_data(input_file_path)
         council_data = data.get(council, {"wiki_name": council})
+        # kwargs holds every CLI flag (postcode, uprn, web_driver, ...), but a flag
+        # not passed on this run still shows up here as None. Without this filter,
+        # that None would overwrite the real value already saved from a previous run.
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         council_data.update({"url": url, **kwargs})
         data[council] = council_data
 
@@ -238,6 +274,42 @@ def update_input_json(council: str, url: str, input_file_path: str, **kwargs):
         print(f"Error updating the JSON file: {e}")
     except json.JSONDecodeError:
         print("Failed to decode JSON, check the integrity of the input file.")
+
+
+def get_scraper_user_agent(fallback_version="1.0"):
+    """
+    Build a polite User-Agent string of the form "uk-bin-collection/<version> (+repo url)"
+    for requests-based scrapers, using the installed package's real version where
+    available. Falls back to fallback_version if the package isn't installed with
+    metadata (e.g. running directly from source without `pip install`/`poetry install`),
+    since importlib.metadata.version() would otherwise raise in that case.
+        :param fallback_version: Version string to use when package metadata isn't available
+    """
+    try:
+        pkg_version = _pkg_version("uk_bin_collection")
+    except PackageNotFoundError:
+        pkg_version = fallback_version
+    return f"uk-bin-collection/{pkg_version} (+https://github.com/robbrad/UKBinCollectionData)"
+
+
+def build_retry_session(headers=None, retry_methods=("GET",)):
+    """
+    Build a requests.Session with retry/backoff configured for transient failures.
+        :param headers: Optional dict of headers to set on the session
+        :param retry_methods: HTTP methods the retry adapter should apply to
+    """
+    session = requests.Session()
+    if headers:
+        session.headers.update(headers)
+    retry = Retry(
+        total=5,
+        backoff_factor=1.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=retry_methods,
+        respect_retry_after_header=True,
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    return session
 
 
 def load_data(file_path):
@@ -312,6 +384,7 @@ def create_webdriver(
     options.add_argument("--disable-gpu")
     options.add_argument("--start-maximized")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
     if user_agent:
         options.add_argument(f"--user-agent={user_agent}")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
@@ -320,11 +393,16 @@ def create_webdriver(
 
     try:
         if web_driver:
-            return webdriver.Remote(command_executor=web_driver, options=options)
+            driver = webdriver.Remote(command_executor=web_driver, options=options)
         else:
-            return webdriver.Chrome(
+            driver = webdriver.Chrome(
                 service=ChromeService(ChromeDriverManager().install()), options=options
             )
+
+        # Set window position to ensure it's visible on screen
+        driver.set_window_position(0, 0)
+
+        return driver
     except MaxRetryError as e:
         print(f"Failed to create WebDriver: {e}")
         raise

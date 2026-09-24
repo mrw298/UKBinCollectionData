@@ -1,10 +1,27 @@
-from bs4 import BeautifulSoup
+import json
+from dataclasses import asdict, dataclass
+from typing import Literal
 
-from uk_bin_collection.uk_bin_collection.common import *
+import requests
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from uk_bin_collection.uk_bin_collection.common import check_uprn
 from uk_bin_collection.uk_bin_collection.get_bin_data import AbstractGetBinDataClass
 
+key_hex = "F57E76482EE3DC3336495DEDEEF3962671B054FE353E815145E29C5689F72FEC"
+iv_hex = "2CBF4FC35C69B82362D393A4F0B9971A"
 
-# import the wonderful Beautiful Soup and the URL grabber
+
+@dataclass
+class NewportInput:
+    P_CLIENT_ID: Literal[130]
+    P_COUNCIL_ID: Literal[260]
+    P_LANG_CODE: Literal["EN"]
+    P_UPRN: str
+
+
 class CouncilClass(AbstractGetBinDataClass):
     """
     Concrete classes have to implement all abstract operations of the
@@ -12,193 +29,113 @@ class CouncilClass(AbstractGetBinDataClass):
     implementation.
     """
 
-    def parse_data(self, page: str, **kwargs) -> dict:
-        user_postcode = kwargs.get("postcode")
-        check_postcode(user_postcode)
-        user_uprn = kwargs.get("uprn")
-        check_uprn(user_uprn)
+    def encode_body(self, newport_input: NewportInput):
+        """
+        Encrypt a NewportInput dataclass using AES-CBC and encode the resulting ciphertext as a hex string.
+        
+        Parameters:
+            newport_input (NewportInput): Dataclass instance to serialize to JSON and encrypt. The instance is converted to a dict via `asdict()` before serialization.
+        
+        Returns:
+            str: Hex-encoded AES-CBC ciphertext of the JSON-serialized input. Encryption uses the module-level `key_hex` and `iv_hex` values and applies PKCS#7 padding.
+        """
+        key = bytes.fromhex(key_hex)
+        iv = bytes.fromhex(iv_hex)
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/87.0.4280.141 Safari/537.36"
-        }
+        json_data = json.dumps(asdict(newport_input))
+        data_bytes = json_data.encode("utf-8")
 
-        requests.packages.urllib3.disable_warnings()
-        with requests.Session() as s:
-            # Set Headers
-            s.headers = headers
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(data_bytes) + padder.finalize()
 
-            # Get the first page - This is the Search for property by Post Code page
-            resource = s.get(
-                "https://iweb.itouchvision.com/portal/f?p=customer:BIN_DAYS:::NO:RP:UID:6CDD2A34C912312074D8E2410531401A8C00EFF7"
+        backend = default_backend()
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+
+        return ciphertext.hex()
+
+    def decode_response(self, hex_input: str):
+
+        """
+        Decrypts a hex-encoded AES-CBC ciphertext and returns the parsed JSON payload.
+        
+        Parameters:
+            hex_input (str): Hex-encoded AES-CBC ciphertext to decrypt.
+        
+        Returns:
+            The Python object produced by JSON decoding the decrypted UTF-8 plaintext (typically a dict).
+        """
+        key = bytes.fromhex(key_hex)
+        iv = bytes.fromhex(iv_hex)
+        ciphertext = bytes.fromhex(hex_input)
+
+        backend = default_backend()
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+        decryptor = cipher.decryptor()
+        decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
+
+        unpadder = padding.PKCS7(128).unpadder()
+        plaintext_bytes = unpadder.update(decrypted_padded) + unpadder.finalize()
+        plaintext = plaintext_bytes.decode("utf-8")
+
+        return json.loads(plaintext)
+
+    def parse_data(self, _: str, **kwargs) -> dict:
+        """
+        Fetch collection-day information for a given UPRN and return it as a normalized bins dictionary.
+        
+        Parameters:
+            _: str
+                Unused placeholder parameter kept for signature compatibility.
+            kwargs:
+                uprn (str): Unique Property Reference Number to query; this value is validated before use.
+        
+        Returns:
+            dict: A dictionary with a "bins" key containing a list of mappings:
+                - "type": the bin type string from the service response.
+                - "collectionDate": the collection date formatted as MM/DD/YYYY.
+        """
+        try:
+            user_uprn: str = kwargs.get("uprn") or ""
+            check_uprn(user_uprn)
+            newport_input = NewportInput(
+                P_CLIENT_ID=130, P_COUNCIL_ID=260, P_LANG_CODE="EN", P_UPRN=user_uprn
             )
-            # Create a BeautifulSoup object from the page's HTML
-            soup = BeautifulSoup(resource.text, "html.parser")
 
-            # The page contains a number of values that must be passed into subsequent requests - extract them here
-            payload = {
-                i["name"]: i.get("value", "") for i in soup.select("input[name]")
+            encoded_input = self.encode_body(newport_input)
+
+            session = requests.Session()
+            headers = {
+                "P_PARAMETER": encoded_input,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             }
-            payload2 = {
-                i["data-for"]: i.get("value", "")
-                for i in soup.select("input[data-for]")
-            }
-            payload_salt = soup.select_one('input[id="pSalt"]').get("value")
-            payload_protected = soup.select_one('input[id="pPageItemsProtected"]').get(
-                "value"
+            response = session.get(
+                "https://iweb.itouchvision.com/portal/itouchvision/kmbd/collectionDay",
+                headers=headers,
             )
 
-            # Add the PostCode and 'SEARCH' to the payload
-            payload["p_request"] = "SEARCH"
-            payload["P153_POST_CODE"] = user_postcode
+            output = response.text
+            
+            # Check if API returned HTML error page instead of encrypted data
+            if output.strip().startswith('<'):
+                raise ValueError(f"API returned HTML error page instead of encrypted data. Status: {response.status_code}")
 
-            # Manipulate the lists and build the JSON that must be submitted in further requests - some data is nested
-            merged_list = {**payload, **payload2}
-            new_list = []
-            other_list = {}
-            for key in merged_list.keys():
-                temp_list = {}
-                val = merged_list[key]
-                if key in [
-                    "P153_UPRN",
-                    "P153_TEMP",
-                    "P153_SYSDATE",
-                    "P0_LANGUAGE",
-                    "P153_POST_CODE",
-                ]:
-                    temp_list = {"n": key, "v": val}
-                    new_list.append(temp_list)
-                elif key in [
-                    "p_flow_id",
-                    "p_flow_step_id",
-                    "p_instance",
-                    "p_page_submission_id",
-                    "p_request",
-                    "p_reload_on_submit",
-                ]:
-                    other_list[key] = val
-                else:
-                    temp_list = {"n": key, "v": "", "ck": val}
-                    new_list.append(temp_list)
-
-            json_builder = {
-                "pageItems": {
-                    "itemsToSubmit": new_list,
-                    "protected": payload_protected,
-                    "rowVersion": "",
-                    "formRegionChecksums": [],
-                },
-                "salt": payload_salt,
-            }
-            json_object = json.dumps(json_builder, separators=(",", ":"))
-            other_list["p_json"] = json_object
-
-            # Set Referrer header
-            s.headers.update(
-                {
-                    "referer": "https://iweb.itouchvision.com/portal/f?p=customer:BIN_DAYS:::NO:RP:UID:6CDD2A34C912312074D8E2410531401A8C00EFF7"
-                }
+            decoded_bins = self.decode_response(output)
+            data: dict[str, list[dict[str, str]]] = {}
+            data["bins"] = list(
+                map(
+                    lambda a: {
+                        "type": a["binType"],
+                        "collectionDate": a["collectionDay"].replace("-", "/"),
+                    },
+                    decoded_bins["collectionDay"],
+                )
             )
 
-            # Generate POST including all the JSON we just built
-            s.post(
-                "https://iweb.itouchvision.com/portal/wwv_flow.accept", data=other_list
-            )
-
-            # The second page on the portal would normally allow you to select your property from a dropdown list of
-            # those that are at the postcode entered on the previous page
-            # The required cookies are stored within the session so re-use the session to keep them
-            resource = s.get(
-                "https://iweb.itouchvision.com/portal/itouchvision/r/customer/bin_days"
-            )
-
-            # Create a BeautifulSoup object from the page's HTML
-            soup = BeautifulSoup(resource.text, "html.parser")
-
-            # The page contains a number of values that must be passed into subsequent requests - extract them here
-            payload = {
-                i["name"]: i.get("value", "") for i in soup.select("input[name]")
-            }
-            payload2 = {
-                i["data-for"]: i.get("value", "")
-                for i in soup.select("input[data-for]")
-            }
-            payload_salt = soup.select_one('input[id="pSalt"]').get("value")
-            payload_protected = soup.select_one('input[id="pPageItemsProtected"]').get(
-                "value"
-            )
-
-            # Add the UPRN and 'SUBMIT' to the payload
-            payload["p_request"] = "SUBMIT"
-            payload["P153_UPRN"] = user_uprn
-
-            # Manipulate the lists and build the JSON that must be submitted in further requests - some data is nested
-            merged_list = {**payload, **payload2}
-            new_list = []
-            other_list = {}
-            for key in merged_list.keys():
-                temp_list = {}
-                val = merged_list[key]
-                if key in ["P153_UPRN", "P153_TEMP", "P153_SYSDATE", "P0_LANGUAGE"]:
-                    temp_list = {"n": key, "v": val}
-                    new_list.append(temp_list)
-                elif key in ["P153_ZABY"]:
-                    temp_list = {"n": key, "v": "1", "ck": val}
-                    new_list.append(temp_list)
-                elif key in ["P153_POST_CODE"]:
-                    temp_list = {"n": key, "v": user_postcode, "ck": val}
-                    new_list.append(temp_list)
-                elif key in [
-                    "p_flow_id",
-                    "p_flow_step_id",
-                    "p_instance",
-                    "p_page_submission_id",
-                    "p_request",
-                    "p_reload_on_submit",
-                ]:
-                    other_list[key] = val
-                else:
-                    temp_list = {"n": key, "v": "", "ck": val}
-                    new_list.append(temp_list)
-
-            json_builder = {
-                "pageItems": {
-                    "itemsToSubmit": new_list,
-                    "protected": payload_protected,
-                    "rowVersion": "",
-                    "formRegionChecksums": [],
-                },
-                "salt": payload_salt,
-            }
-
-            json_object = json.dumps(json_builder, separators=(",", ":"))
-            other_list["p_json"] = json_object
-
-            # Generate POST including all the JSON we just built
-            s.post(
-                "https://iweb.itouchvision.com/portal/wwv_flow.accept", data=other_list
-            )
-
-            # The third and final page on the portal shows the detail of the waste collection services
-            # The required cookies are stored within the session so re-use the session to keep them
-            resource = s.get(
-                "https://iweb.itouchvision.com/portal/itouchvision/r/customer/bin_days"
-            )
-
-            # Create a BeautifulSoup object from the page's HTML
-            soup = BeautifulSoup(resource.text, "html.parser")
-            data = {"bins": []}
-
-            # Loop through the items on the page and build a JSON object for ingestion
-            for item in soup.select(".t-MediaList-item"):
-                for value in item.select(".t-MediaList-body"):
-                    dict_data = {
-                        "type": value.select("span")[1].get_text(strip=True).title(),
-                        "collectionDate": datetime.strptime(
-                            value.select(".t-MediaList-desc")[0].get_text(strip=True),
-                            "%A, %d %B, %Y",
-                        ).strftime(date_format),
-                    }
-                    data["bins"].append(dict_data)
-
-            return data
+        except Exception as e:
+            # Here you can log the exception if needed
+            print(f"An error occurred: {e}")
+            # Optionally, re-raise the exception if you want it to propagate
+            raise
+        return data
